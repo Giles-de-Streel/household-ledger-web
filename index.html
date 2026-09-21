@@ -750,7 +750,7 @@
   .report-tabs { display: flex; gap: 4px; padding: 8px 12px 0; background: var(--paper-shade); border-bottom: 1px solid var(--rule); }
   .report-tabs button {
     all: unset; box-sizing: border-box; cursor: pointer;
-    padding: 7px 14px; font-size: 0.85rem; color: var(--ink-soft);
+    padding: 7px 11px; font-size: 0.85rem; color: var(--ink-soft);
     border-bottom: 2px solid transparent;
   }
   .report-tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
@@ -784,6 +784,25 @@
     font: inherit; font-size: 0.8rem; color: var(--ink); background: var(--paper);
     border: 1px solid var(--rule); border-radius: 6px; padding: 4px 6px; max-width: 100%;
   }
+  .rp-filters input[type="search"] {
+    font: inherit; font-size: 0.85rem; color: var(--ink); background: var(--paper);
+    border: 1px solid var(--rule); border-radius: 6px; padding: 6px 8px; flex: 1; min-width: 140px;
+  }
+  .rp-res {
+    all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 10px; width: 100%;
+    padding: 7px 0; border-top: 1px solid var(--rule); font-size: 0.82rem; cursor: pointer;
+  }
+  .rp-res:first-of-type { border-top: none; }
+  .rp-res:hover { background: var(--paper-shade); }
+  .rp-res:focus-visible { outline: 2px solid var(--accent); }
+  .rp-res .d { font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; color: var(--ink-soft); flex-shrink: 0; }
+  .rp-res .m { flex: 1; min-width: 0; }
+  .rp-res .m b { display: block; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rp-res .m small { display: block; color: var(--ink-soft); font-size: 0.72rem; }
+  .rp-res .a { font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+  .rp-res .a.credit { color: var(--credit); }
+  .rp-res .a.debit { color: var(--debit); }
+  .rp-note { font-size: 0.75rem; color: var(--ink-soft); margin-top: 10px; }
   .rp-chart-title { font-size: 0.85rem; font-weight: 600; margin: 4px 0 2px; }
   .rp-legend { display: flex; gap: 14px; font-size: 0.78rem; color: var(--ink-soft); margin-bottom: 2px; }
   .rp-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
@@ -963,6 +982,8 @@
     <div class="report-tabs" role="tablist">
       <button type="button" role="tab" data-action="report-tab" data-tab="budget">Budget</button>
       <button type="button" role="tab" data-action="report-tab" data-tab="trends">Trends</button>
+      <button type="button" role="tab" data-action="report-tab" data-tab="forecast">Forecast</button>
+      <button type="button" role="tab" data-action="report-tab" data-tab="search">Search</button>
     </div>
     <div class="audit-body report-body" id="report-body"></div>
   </div>
@@ -1040,6 +1061,8 @@
   var reportMonths = 12;
   var reportCat = "";
   var reportTable = false;
+  var searchText = "";
+  var searchCat = "";
   var reportChartData = {};
 
   var drive = {
@@ -1657,10 +1680,196 @@
     return html;
   }
 
+  // Latest occurrence of every active recurring series, plus the month it started.
+  function recurringSeriesList() {
+    var out = [];
+    LEDGERS.forEach(function (ledger) {
+      var data = ledgerData(ledger.key);
+      for (var cat in data) {
+        var templates = {}, firstDate = {};
+        (data[cat] || []).forEach(function (p) {
+          if (!p.recurDay || !p.seriesId) return;
+          if (!templates[p.seriesId] || p.date > templates[p.seriesId].date) templates[p.seriesId] = p;
+          if (!firstDate[p.seriesId] || p.date < firstDate[p.seriesId]) firstDate[p.seriesId] = p.date;
+        });
+        Object.keys(templates).forEach(function (sid) {
+          out.push({ ledger: ledger, cat: cat, tmpl: templates[sid], first: firstDate[sid], sid: sid });
+        });
+      }
+    });
+    return out;
+  }
+
+  function signedNet(inc, exp) {
+    var n = inc - exp;
+    return (n < 0 ? "-" : "") + "$" + formatMoney(Math.abs(n));
+  }
+
+  function renderReportForecast() {
+    var today = todayISO();
+    var mk = monthKeyOf(selectedYear, selectedMonth);
+    var incDone = 0, expDone = 0, incSoon = 0, expSoon = 0, upcoming = [];
+    LEDGERS.forEach(function (ledger) {
+      var data = ledgerData(ledger.key);
+      for (var cat in data) {
+        (data[cat] || []).forEach(function (p) {
+          if (String(p.date || "").slice(0, 7) !== mk) return;
+          var amt = Number(p.amount) || 0;
+          var soon = p.date > today;
+          if (ledger.key === "income") { if (soon) incSoon += amt; else incDone += amt; }
+          else { if (soon) expSoon += amt; else expDone += amt; }
+          if (soon) upcoming.push({ date: p.date, cat: cat, desc: p.description, amt: amt, tone: ledger.tone });
+        });
+      }
+    });
+    upcoming.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+
+    var html = '<div class="rp-sub">' + escapeHtml(MONTH_NAMES[selectedMonth] + " " + selectedYear) + ' &middot; month-end projection</div>';
+    html += '<div class="rp-tiles">' +
+      '<div><span class="rp-tile-label">Income</span><span class="rp-tile-value">$' + formatMoney(incDone + incSoon) + '</span></div>' +
+      '<div><span class="rp-tile-label">Expenses</span><span class="rp-tile-value">$' + formatMoney(expDone + expSoon) + '</span></div>' +
+      '<div><span class="rp-tile-label">Projected net</span><span class="rp-tile-value' + (incDone + incSoon < expDone + expSoon ? ' over' : '') + '">' + signedNet(incDone + incSoon, expDone + expSoon) + '</span></div>' +
+      '</div>';
+    html += '<div class="rp-h">Still to come this month &middot; ' + upcoming.length + '</div>';
+    if (!upcoming.length) {
+      html += '<div class="empty-note">Nothing dated after today.</div>';
+    } else {
+      upcoming.forEach(function (u) {
+        html += '<div class="rp-row"><div class="rp-row-top"><span class="name">' + escapeHtml(formatDate(u.date)) + ' &middot; ' + escapeHtml(u.desc) + ' <span class="rp-status">(' + escapeHtml(u.cat) + ')</span></span>' +
+          '<span class="rp-num">' + (u.tone === "credit" ? '+' : '-') + '$' + formatMoney(u.amt) + '</span></div></div>';
+      });
+    }
+
+    // Next month: recurring entries that will be created, plus typical non-recurring spending.
+    var ny = selectedYear, nm = selectedMonth + 1;
+    if (nm > 11) { nm = 0; ny += 1; }
+    var nk = monthKeyOf(ny, nm);
+    var nextDays = new Date(ny, nm + 1, 0).getDate();
+    var recInc = 0, recExp = 0, recItems = [];
+    recurringSeriesList().forEach(function (r) {
+      if (r.first.slice(0, 7) > nk) return;
+      var already = (ledgerData(r.ledger.key)[r.cat] || []).some(function (p) { return p.seriesId === r.sid && String(p.date).slice(0, 7) === nk; });
+      if (already) return;
+      var amt = Number(r.tmpl.amount) || 0;
+      if (r.ledger.key === "income") recInc += amt; else recExp += amt;
+      recItems.push({ day: Math.min(r.tmpl.recurDay, nextDays), desc: r.tmpl.description, cat: r.cat, amt: amt, tone: r.ledger.tone });
+    });
+    recItems.sort(function (a, b) { return a.day - b.day; });
+
+    // average non-recurring spending over the 3 most recent complete months before next month
+    var endY = ny, endM = nm - 1;
+    if (endM < 0) { endM = 11; endY -= 1; }
+    if (endY > now.getFullYear() || (endY === now.getFullYear() && endM >= now.getMonth())) {
+      endY = now.getFullYear(); endM = now.getMonth() - 1;
+      if (endM < 0) { endM = 11; endY -= 1; }
+    }
+    var avgKeys = {};
+    var ay = endY, am = endM;
+    for (var i = 0; i < 3; i++) {
+      avgKeys[monthKeyOf(ay, am)] = true;
+      am -= 1;
+      if (am < 0) { am = 11; ay -= 1; }
+    }
+    var otherTotal = 0, otherMonthsWithData = {};
+    var expData = ledgerData("expenses");
+    for (var c in expData) {
+      (expData[c] || []).forEach(function (p) {
+        var k = String(p.date || "").slice(0, 7);
+        if (p.seriesId || !avgKeys[k]) return;
+        otherTotal += Number(p.amount) || 0;
+        otherMonthsWithData[k] = true;
+      });
+    }
+    var monthsUsed = Object.keys(otherMonthsWithData).length;
+    var avgOther = monthsUsed ? otherTotal / monthsUsed : 0;
+
+    html += '<div class="rp-h">Next month &middot; ' + escapeHtml(MONTH_NAMES[nm] + " " + ny) + '</div>';
+    html += '<div class="rp-tiles">' +
+      '<div><span class="rp-tile-label">Recurring income</span><span class="rp-tile-value">$' + formatMoney(recInc) + '</span></div>' +
+      '<div><span class="rp-tile-label">Recurring bills</span><span class="rp-tile-value">$' + formatMoney(recExp) + '</span></div>' +
+      '<div><span class="rp-tile-label">Typical other</span><span class="rp-tile-value">$' + formatMoney(avgOther) + '</span></div>' +
+      '<div><span class="rp-tile-label">Projected net</span><span class="rp-tile-value' + (recInc < recExp + avgOther ? ' over' : '') + '">' + signedNet(recInc, recExp + avgOther) + '</span></div>' +
+      '</div>';
+    if (recItems.length) {
+      recItems.forEach(function (r) {
+        html += '<div class="rp-row"><div class="rp-row-top"><span class="name">Day ' + r.day + ' &middot; ' + escapeHtml(r.desc) + ' <span class="rp-status">(' + escapeHtml(r.cat) + ')</span></span>' +
+          '<span class="rp-num">' + (r.tone === "credit" ? '+' : '-') + '$' + formatMoney(r.amt) + '</span></div></div>';
+      });
+    } else {
+      html += '<div class="empty-note">No recurring entries are waiting for next month.</div>';
+    }
+    html += '<div class="rp-note">Built from your recurring entries plus the average of non-recurring spending over ' +
+      (monthsUsed ? monthsUsed + ' recent month' + (monthsUsed === 1 ? '' : 's') : 'recent months (none recorded yet)') +
+      '. One-off income is not predicted.</div>';
+    return html;
+  }
+
+  function renderReportSearch() {
+    var options = '<option value="">All categories</option>';
+    LEDGERS.forEach(function (ledger) {
+      ledger.groups.forEach(function (g) {
+        options += '<optgroup label="' + escapeHtml((ledger.sectionLabel) + (g.name ? " – " + g.name : "")) + '">';
+        g.categories.forEach(function (c) {
+          options += '<option value="' + escapeHtml(c) + '"' + (c === searchCat ? ' selected' : '') + '>' + escapeHtml(c) + '</option>';
+        });
+        options += '</optgroup>';
+      });
+    });
+    return '<div class="rp-filters">' +
+      '<input type="search" data-action="search-text" placeholder="Description, category or amount" aria-label="Search entries" value="' + escapeHtml(searchText) + '" autocomplete="off">' +
+      '<select data-action="search-cat" aria-label="Category">' + options + '</select>' +
+      '</div><div id="rp-results"></div>';
+  }
+
+  function updateSearchResults() {
+    var box = document.getElementById("rp-results");
+    if (!box) return;
+    var q = searchText.trim().toLowerCase();
+    var qNum = q !== "" && !isNaN(Number(q.replace(/[$,]/g, ""))) ? Number(q.replace(/[$,]/g, "")) : null;
+    if (!q && !searchCat) {
+      box.innerHTML = '<div class="empty-note">Type to search every month, or pick a category to list all of its entries.</div>';
+      return;
+    }
+    var hits = [];
+    LEDGERS.forEach(function (ledger) {
+      var data = ledgerData(ledger.key);
+      for (var cat in data) {
+        if (searchCat && cat !== searchCat) continue;
+        (data[cat] || []).forEach(function (p) {
+          if (q) {
+            var textHit = String(p.description || "").toLowerCase().indexOf(q) !== -1 || cat.toLowerCase().indexOf(q) !== -1;
+            var amtHit = qNum !== null && Math.abs((Number(p.amount) || 0) - qNum) < 0.005;
+            if (!textHit && !amtHit) return;
+          }
+          hits.push({ date: p.date, cat: cat, desc: p.description, amt: Number(p.amount) || 0, tone: ledger.tone });
+        });
+      }
+    });
+    hits.sort(function (a, b) { return a.date < b.date ? 1 : a.date > b.date ? -1 : 0; });
+    if (!hits.length) { box.innerHTML = '<div class="empty-note">No matching entries.</div>'; return; }
+    var inc = 0, exp = 0;
+    hits.forEach(function (h) { if (h.tone === "credit") inc += h.amt; else exp += h.amt; });
+    var shown = hits.slice(0, 200);
+    var html = '<div class="rp-sub">' + hits.length + ' match' + (hits.length === 1 ? '' : 'es') +
+      (inc ? ' &middot; income $' + formatMoney(inc) : '') + (exp ? ' &middot; expenses $' + formatMoney(exp) : '') +
+      (hits.length > shown.length ? ' &middot; showing newest 200' : '') + '</div>';
+    shown.forEach(function (h) {
+      html += '<button type="button" class="rp-res" data-action="report-goto" data-date="' + escapeHtml(h.date) + '">' +
+        '<span class="d">' + escapeHtml(formatDate(h.date)) + '</span>' +
+        '<span class="m"><b>' + escapeHtml(h.desc) + '</b><small>' + escapeHtml(h.cat) + '</small></span>' +
+        '<span class="a ' + h.tone + '">' + (h.tone === "credit" ? '+' : '-') + '$' + formatMoney(h.amt) + '</span></button>';
+    });
+    box.innerHTML = html;
+  }
+
   function renderReport() {
     var tabs = reportOverlayEl.querySelectorAll('[data-action="report-tab"]');
     for (var i = 0; i < tabs.length; i++) tabs[i].setAttribute("aria-selected", String(tabs[i].getAttribute("data-tab") === reportTab));
-    reportBodyEl.innerHTML = reportTab === "budget" ? renderReportBudget() : renderReportTrends();
+    reportBodyEl.innerHTML = reportTab === "budget" ? renderReportBudget()
+      : reportTab === "trends" ? renderReportTrends()
+      : reportTab === "forecast" ? renderReportForecast()
+      : renderReportSearch();
+    if (reportTab === "search") updateSearchResults();
   }
 
   function openReport() {
@@ -2499,6 +2708,13 @@
     var el = e.target.closest("[data-action]");
     if (!el) return;
     var action = el.getAttribute("data-action");
+    if (action === "report-goto") {
+      goToMonthOf(el.getAttribute("data-date"));
+      closeReport();
+      render();
+      materializeRecurring();
+      return;
+    }
     if (action === "report-tab") reportTab = el.getAttribute("data-tab");
     else if (action === "report-months") reportMonths = Number(el.getAttribute("data-n")) === 6 ? 6 : 12;
     else if (action === "report-table") reportTable = !reportTable;
@@ -2507,9 +2723,14 @@
     renderReport();
   });
   reportOverlayEl.addEventListener("change", function (e) {
-    if (e.target.getAttribute("data-action") !== "report-cat") return;
-    reportCat = e.target.value;
-    renderReport();
+    var act = e.target.getAttribute("data-action");
+    if (act === "report-cat") { reportCat = e.target.value; renderReport(); }
+    else if (act === "search-cat") { searchCat = e.target.value; updateSearchResults(); }
+  });
+  reportOverlayEl.addEventListener("input", function (e) {
+    if (e.target.getAttribute("data-action") !== "search-text") return;
+    searchText = e.target.value;
+    updateSearchResults();
   });
   reportOverlayEl.addEventListener("pointermove", function (e) {
     var hit = e.target.closest && e.target.closest(".hit");
