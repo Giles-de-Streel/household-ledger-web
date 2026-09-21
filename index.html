@@ -1,0 +1,2562 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>de Streel Household Ledger</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#17332B">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+  :root {
+    --paper: #F1EEE1;
+    --paper-shade: #E7E2D0;
+    --ink: #22261F;
+    --ink-soft: #6C6F5F;
+    --rule: #D6CFB4;
+    --cover: #17332B;
+    --cover-light: #24483C;
+    --accent: #3D7A5E;
+    --accent-ink: #F1EEE1;
+    --credit: #2F7A52;
+    --debit: #9C4A3C;
+    --danger-hover: #7A2F24;
+    --shadow: rgba(23, 51, 43, 0.18);
+    --credit-strip: #8FEAB8;
+    --debit-strip: #FFA98A;
+    --series-income: #2a78d6;
+    --series-expense: #eb6834;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #16180F;
+      --paper-shade: #1E2116;
+      --ink: #ECE7D6;
+      --ink-soft: #9B9884;
+      --rule: #383C2C;
+      --cover: #101E17;
+      --cover-light: #1D4536;
+      --accent: #5FC08A;
+      --accent-ink: #0E1A13;
+      --credit: #6FCE9E;
+      --debit: #E28468;
+      --danger-hover: #F0A48D;
+      --shadow: rgba(0, 0, 0, 0.45);
+      --series-income: #3987e5;
+      --series-expense: #d95926;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --paper: #16180F;
+    --paper-shade: #1E2116;
+    --ink: #ECE7D6;
+    --ink-soft: #9B9884;
+    --rule: #383C2C;
+    --cover: #101E17;
+    --cover-light: #1D4536;
+    --accent: #5FC08A;
+    --accent-ink: #0E1A13;
+    --credit: #6FCE9E;
+    --debit: #E28468;
+    --danger-hover: #F0A48D;
+    --shadow: rgba(0, 0, 0, 0.45);
+    --series-income: #3987e5;
+    --series-expense: #d95926;
+  }
+
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html { color-scheme: light dark; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    padding-inline: 16px;
+    padding-block: 32px;
+  }
+
+  .sheet {
+    max-width: 640px;
+    margin: 0 auto;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 18px 40px -20px var(--shadow), 0 2px 0 var(--rule);
+    border: 1px solid var(--rule);
+  }
+
+  .masthead {
+    background: var(--cover);
+    color: var(--paper);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 16px 20px 12px;
+  }
+
+  .masthead h1 {
+    margin: 0;
+    font-family: 'Fraunces', Georgia, serif;
+    font-weight: 600;
+    font-size: 1.3rem;
+    letter-spacing: 0.01em;
+    text-wrap: balance;
+  }
+
+  .month-bar {
+    background: var(--cover);
+    color: var(--paper);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 0 14px 14px;
+    flex-wrap: wrap;
+  }
+
+  .month-nav {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .month-nav button.arrow {
+    all: unset;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 5px;
+    cursor: pointer;
+    color: var(--paper);
+    opacity: 0.85;
+  }
+  .month-nav button.arrow:hover { background: rgba(241, 238, 225, 0.14); opacity: 1; }
+  .month-nav button.arrow:focus-visible { outline: 2px solid var(--credit); }
+
+  .month-label {
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 1.15rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    padding: 0 4px;
+    min-width: 168px;
+    text-align: center;
+  }
+
+  .today-btn {
+    all: unset;
+    box-sizing: border-box;
+    font-size: 0.72rem;
+    color: var(--credit);
+    cursor: pointer;
+    padding: 3px 8px;
+    border: 1px solid rgba(111, 206, 158, 0.45);
+    border-radius: 20px;
+    margin-left: 6px;
+  }
+  .today-btn:focus-visible { outline: 2px solid var(--credit); }
+
+  .current-date {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--paper);
+    opacity: 0.6;
+    white-space: nowrap;
+    margin-left: 4px;
+  }
+
+  .summary-strip {
+    display: flex;
+    flex-wrap: wrap;
+    background: var(--cover-light);
+    border-top: 1px solid rgba(0, 0, 0, 0.12);
+  }
+
+  .stat {
+    flex: 1 1 120px;
+    padding: 10px 16px;
+    border-left: 1px solid rgba(241, 238, 225, 0.14);
+  }
+  .stat:first-child { border-left: none; }
+
+  .stat .label {
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--paper);
+    opacity: 0.92;
+  }
+
+  .stat .value {
+    font-family: 'IBM Plex Mono', monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 1.1rem;
+    font-weight: 700;
+  }
+  .stat.credit .value { color: var(--credit-strip); }
+  .stat.debit .value { color: var(--debit-strip); }
+  .stat.net .value { color: var(--paper); }
+  .stat.net.negative .value { color: var(--debit); }
+
+  .sync-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 9px 16px;
+    background: var(--paper-shade);
+    border-bottom: 1px solid var(--rule);
+    font-size: 0.78rem;
+  }
+  .sync-status {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--ink-soft);
+  }
+  .sync-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--ink-soft);
+    flex-shrink: 0;
+  }
+  .sync-dot.connected { background: var(--credit); }
+  .sync-dot.error { background: var(--debit); }
+  .sync-actions { display: flex; align-items: center; gap: 10px; }
+  .sync-btn {
+    all: unset;
+    box-sizing: border-box;
+    cursor: pointer;
+    color: var(--accent);
+    font-weight: 500;
+    font-size: 0.76rem;
+    padding: 4px 11px;
+    border: 1px solid var(--accent);
+    border-radius: 20px;
+  }
+  .sync-btn:hover { background: var(--accent); color: var(--accent-ink); }
+  .sync-btn:focus-visible { outline: 2px solid var(--accent); }
+  .sync-link {
+    all: unset;
+    box-sizing: border-box;
+    cursor: pointer;
+    color: var(--ink-soft);
+    text-decoration: underline;
+    font-size: 0.74rem;
+  }
+
+  .share-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 8px 16px;
+    background: var(--paper-shade);
+    border-bottom: 1px solid var(--rule);
+    font-size: 0.78rem;
+  }
+  .share-row input {
+    font-family: 'Inter', sans-serif;
+    font-size: 0.82rem;
+    border: 1px solid var(--rule);
+    background: var(--paper);
+    color: var(--ink);
+    border-radius: 4px;
+    padding: 5px 8px;
+    flex: 1;
+    min-width: 160px;
+  }
+  .share-row input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .share-msg { color: var(--ink-soft); font-size: 0.76rem; }
+
+  .load-error {
+    font-size: 0.8rem;
+    padding: 8px 20px;
+    background: color-mix(in srgb, var(--debit) 18%, var(--paper));
+    color: var(--debit);
+  }
+
+  .body-scroll {
+    background-image: repeating-linear-gradient(
+      to bottom,
+      transparent,
+      transparent 30px,
+      var(--rule) 30px,
+      var(--rule) 31px
+    );
+    background-color: var(--paper);
+    padding: 18px 10px 6px;
+  }
+
+  .loading-row {
+    padding: 40px 16px;
+    text-align: center;
+    color: var(--ink-soft);
+    font-size: 0.9rem;
+  }
+
+  .section-label {
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--ink-soft);
+    padding: 3px 4px 8px;
+    background: var(--paper);
+    position: relative;
+  }
+
+  .section { margin-bottom: 20px; }
+
+  .group {
+    margin-bottom: 14px;
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid var(--rule);
+    background: var(--paper);
+  }
+
+  .group-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: 9px 14px;
+    background: var(--cover-light);
+    color: var(--paper);
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 1rem;
+  }
+  .group-header .amt {
+    font-family: 'IBM Plex Mono', monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 0.88rem;
+    opacity: 0.9;
+  }
+
+  .cat { border-top: 1px solid var(--rule); }
+  .cat:first-child { border-top: none; }
+
+  .cat-header {
+    all: unset;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 9px 14px;
+    cursor: pointer;
+    color: var(--ink);
+    font-size: 0.92rem;
+  }
+  .cat-header { position: relative; }
+  .cat-header:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .cat-header .left { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .cat-header .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cat-header .count {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--ink-soft);
+    flex-shrink: 0;
+  }
+  .cat-header .amt {
+    font-family: 'IBM Plex Mono', monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 0.9rem;
+    color: var(--ink-soft);
+    flex-shrink: 0;
+    padding-left: 8px;
+  }
+  .cat-header[data-hastotal="true"][data-tone="debit"] .amt { color: var(--debit); }
+  .cat-header[data-hastotal="true"][data-tone="credit"] .amt { color: var(--credit); }
+
+  .budget-note {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--ink-soft);
+    flex-basis: 100%;
+    padding-left: 23px;
+    white-space: nowrap;
+  }
+  .cat-header.has-budget { padding-bottom: 13px; }
+  .cat-header.has-budget .left { flex-wrap: wrap; row-gap: 1px; }
+  .budget-note.over { color: var(--debit); font-weight: 600; }
+  .budget-bar {
+    position: absolute;
+    left: 14px; right: 14px; bottom: 2px;
+    height: 3px;
+    border-radius: 2px;
+    background: var(--rule);
+    overflow: hidden;
+    pointer-events: none;
+  }
+  .budget-bar > span { display: block; height: 100%; background: var(--accent); }
+  .budget-bar.over > span { background: var(--debit); }
+
+  .budget-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 14px 8px 34px;
+    border-bottom: 1px solid var(--rule);
+    font-size: 0.82rem;
+    color: var(--ink-soft);
+  }
+  .budget-row .budget-label { flex: 1; min-width: 0; }
+  .budget-row .budget-amt { font-family: 'IBM Plex Mono', monospace; color: var(--ink); font-weight: 600; }
+  .budget-form input[name="budget"] { width: 110px; text-align: right; }
+
+  .chevron { flex-shrink: 0; color: var(--ink-soft); display: flex; }
+  .cat-panel { background: var(--paper-shade); }
+
+  .purchase-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 14px 7px 34px;
+    border-top: 1px solid var(--rule);
+    font-size: 0.88rem;
+  }
+  .purchase-row.flush { padding-left: 14px; }
+  .purchase-row .date {
+    font-family: 'IBM Plex Mono', monospace;
+    color: var(--ink-soft);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .purchase-row .cat-tag {
+    font-size: 0.72rem;
+    color: var(--ink-soft);
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    border-radius: 20px;
+    padding: 1px 8px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .purchase-row .desc {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .purchase-row .amt {
+    font-family: 'IBM Plex Mono', monospace;
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+  }
+  .purchase-row[data-tone="debit"] .amt { color: var(--debit); }
+  .purchase-row[data-tone="credit"] .amt { color: var(--credit); }
+  .purchase-row .del {
+    all: unset;
+    box-sizing: border-box;
+    cursor: pointer;
+    color: var(--ink-soft);
+    display: flex;
+    padding: 2px;
+    border-radius: 4px;
+  }
+  .purchase-row .del:hover { color: var(--danger-hover); }
+  .purchase-row .del:focus-visible { outline: 2px solid var(--accent); }
+  .purchase-row .edit-btn {
+    all: unset;
+    box-sizing: border-box;
+    cursor: pointer;
+    color: var(--ink-soft);
+    display: flex;
+    padding: 2px;
+    border-radius: 4px;
+  }
+  .purchase-row .edit-btn:hover { color: var(--accent); }
+  .purchase-row .edit-btn:focus-visible { outline: 2px solid var(--accent); }
+  .recur-badge {
+    display: inline-flex;
+    vertical-align: middle;
+    color: var(--ink-soft);
+    opacity: 0.8;
+  }
+  .purchase-row .stop-recur {
+    all: unset;
+    box-sizing: border-box;
+    cursor: pointer;
+    color: var(--ink-soft);
+    display: flex;
+    padding: 2px;
+    border-radius: 4px;
+  }
+  .purchase-row .stop-recur:hover { color: var(--accent); }
+  .purchase-row .stop-recur:focus-visible { outline: 2px solid var(--accent); }
+
+  .add-toggle {
+    all: unset;
+    box-sizing: border-box;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 14px 9px 34px;
+    color: var(--accent);
+    font-size: 0.88rem;
+    cursor: pointer;
+    border-top: 1px dashed var(--rule);
+  }
+  .add-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+  .add-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 14px 9px 34px;
+    border-top: 1px dashed var(--rule);
+  }
+  .add-form input {
+    font-family: 'Inter', sans-serif;
+    font-size: 0.85rem;
+    border: 1px solid var(--rule);
+    background: var(--paper);
+    color: var(--ink);
+    border-radius: 4px;
+    padding: 5px 8px;
+  }
+  .add-form input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .add-form input[type="date"], .add-form input[type="number"] { font-family: 'IBM Plex Mono', monospace; }
+  .add-form input[name="date"] { width: 132px; }
+  .add-form input[name="description"] { flex: 1; min-width: 110px; }
+  .add-form input[name="amount"] { width: 88px; text-align: right; }
+  .add-form button[type="submit"] {
+    all: unset;
+    box-sizing: border-box;
+    background: var(--accent);
+    color: var(--accent-ink);
+    font-family: 'Inter', sans-serif;
+    font-weight: 500;
+    font-size: 0.85rem;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .add-form .cancel {
+    all: unset;
+    box-sizing: border-box;
+    color: var(--ink-soft);
+    font-size: 0.82rem;
+    cursor: pointer;
+    padding: 4px;
+  }
+  .recur-check {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.8rem;
+    color: var(--ink-soft);
+    white-space: nowrap;
+  }
+  .recur-check input { width: auto; }
+
+  .cc-panel { padding: 10px 14px 10px 34px; border-bottom: 1px solid var(--rule); }
+  .cc-summary { display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 8px; }
+  .cc-summary-label {
+    display: block;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--ink-soft);
+  }
+  .cc-summary-value {
+    display: block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .cc-status {
+    font-size: 0.8rem;
+    font-weight: 500;
+    padding: 5px 10px;
+    border-radius: 5px;
+    margin-bottom: 8px;
+    display: inline-block;
+  }
+  .cc-status.short { background: rgba(156, 74, 60, 0.14); color: var(--debit); }
+  .cc-status.ok { background: rgba(47, 122, 82, 0.14); color: var(--credit); }
+  .cc-list { margin-bottom: 4px; }
+  .cc-row {
+    padding: 6px 0;
+    border-top: 1px dashed var(--rule);
+    font-size: 0.85rem;
+  }
+  .cc-row:first-child { border-top: none; }
+  .cc-row-top { display: flex; align-items: center; gap: 8px; }
+  .cc-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+  .cc-row-meta {
+    font-family: 'IBM Plex Mono', monospace;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-soft);
+    font-size: 0.78rem;
+    margin-top: 2px;
+  }
+  .cc-autopay-badge {
+    font-family: 'Inter', sans-serif;
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--accent);
+    background: rgba(61, 122, 94, 0.12);
+    border-radius: 20px;
+    padding: 1px 7px;
+  }
+  .cc-panel .add-toggle, .cc-panel .add-form { padding-left: 0; }
+  .cc-form input[name="name"] { flex: 1; min-width: 110px; }
+  .cc-form input[name="balance"], .cc-form input[name="minPayment"] { width: 110px; text-align: right; }
+  .cc-row .del, .cc-row .edit-btn {
+    all: unset;
+    box-sizing: border-box;
+    cursor: pointer;
+    color: var(--ink-soft);
+    display: flex;
+    padding: 2px;
+    border-radius: 4px;
+  }
+  .cc-row .del:hover { color: var(--danger-hover); }
+  .cc-row .edit-btn:hover { color: var(--accent); }
+  .cc-row .del:focus-visible, .cc-row .edit-btn:focus-visible { outline: 2px solid var(--accent); }
+
+  .empty-note { padding: 14px; color: var(--ink-soft); font-size: 0.85rem; text-align: center; }
+
+  .export-btn {
+    all: unset;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(0, 0, 0, 0.22);
+    color: var(--paper);
+    font-family: 'Inter', sans-serif;
+    font-size: 0.78rem;
+    font-weight: 500;
+    padding: 6px 14px;
+    border-radius: 20px;
+    cursor: pointer;
+  }
+  .export-btn:hover { background: rgba(0, 0, 0, 0.32); }
+  .export-btn:focus-visible { outline: 2px solid var(--credit); }
+
+  .export-menu { position: relative; }
+  .export-dropdown {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 5;
+    background: var(--cover);
+    border: 1px solid rgba(241, 238, 225, 0.18);
+    border-radius: 10px;
+    box-shadow: 0 12px 28px -12px rgba(0, 0, 0, 0.5);
+    padding: 4px;
+    min-width: 190px;
+    white-space: nowrap;
+  }
+  .export-dropdown button {
+    all: unset;
+    box-sizing: border-box;
+    display: block;
+    width: 100%;
+    color: var(--paper);
+    font-family: 'Inter', sans-serif;
+    font-size: 0.82rem;
+    padding: 8px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .export-dropdown button:hover, .export-dropdown button:focus-visible { background: rgba(241, 238, 225, 0.12); }
+
+  .footer { padding: 14px 12px 4px; text-align: center; }
+  .footer button {
+    all: unset;
+    box-sizing: border-box;
+    color: var(--ink-soft);
+    font-size: 0.78rem;
+    text-decoration: underline;
+    cursor: pointer;
+    padding: 4px 8px;
+  }
+  .footer button:hover { color: var(--debit); }
+  .footer button:focus-visible { outline: 2px solid var(--accent); border-radius: 3px; }
+  .footer button[data-action="open-audit"]:hover { color: var(--accent); }
+
+  .audit-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 20, 15, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    z-index: 50;
+  }
+  .audit-card {
+    background: var(--paper);
+    color: var(--ink);
+    width: 100%;
+    max-width: 480px;
+    max-height: 80vh;
+    border-radius: 10px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.5);
+  }
+  .audit-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: var(--cover);
+    color: var(--paper);
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 1.05rem;
+  }
+  .audit-close {
+    all: unset;
+    box-sizing: border-box;
+    cursor: pointer;
+    font-size: 1.3rem;
+    line-height: 1;
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: var(--paper);
+  }
+  .audit-close:hover { background: rgba(241, 238, 225, 0.16); }
+  .audit-close:focus-visible { outline: 2px solid var(--credit); }
+  .audit-body {
+    overflow-y: auto;
+    background: var(--paper);
+  }
+
+  .report-card { max-width: 600px; }
+  .report-tabs { display: flex; gap: 4px; padding: 8px 12px 0; background: var(--paper-shade); border-bottom: 1px solid var(--rule); }
+  .report-tabs button {
+    all: unset; box-sizing: border-box; cursor: pointer;
+    padding: 7px 14px; font-size: 0.85rem; color: var(--ink-soft);
+    border-bottom: 2px solid transparent;
+  }
+  .report-tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+  .report-tabs button:focus-visible { outline: 2px solid var(--accent); }
+  .report-body { padding: 14px 16px 18px; }
+  .rp-sub { font-size: 0.78rem; color: var(--ink-soft); margin-bottom: 10px; }
+  .rp-tiles { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-bottom: 14px; }
+  .rp-tile-label { display: block; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--ink-soft); }
+  .rp-tile-value { display: block; font-size: 1.15rem; font-weight: 600; color: var(--ink); }
+  .rp-tile-value.over { color: var(--debit); }
+  .rp-h { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--ink-soft); margin: 16px 0 6px; }
+  .rp-row { padding: 7px 0; border-top: 1px solid var(--rule); font-size: 0.85rem; }
+  .rp-row:first-of-type { border-top: none; }
+  .rp-row-top { display: flex; justify-content: space-between; gap: 10px; }
+  .rp-row-top .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rp-num { font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; font-size: 0.8rem; color: var(--ink); white-space: nowrap; }
+  .rp-meter { height: 6px; border-radius: 3px; background: var(--rule); overflow: hidden; margin: 5px 0 3px; }
+  .rp-meter > span { display: block; height: 100%; background: var(--accent); }
+  .rp-meter.over > span { background: var(--debit); }
+  .rp-status { font-size: 0.75rem; color: var(--ink-soft); }
+  .rp-status.over { color: var(--debit); font-weight: 600; }
+  .rp-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 12px; font-size: 0.8rem; color: var(--ink-soft); }
+  .rp-seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
+  .rp-seg button, .rp-link {
+    all: unset; box-sizing: border-box; cursor: pointer; padding: 4px 10px; font-size: 0.78rem; color: var(--ink-soft);
+  }
+  .rp-seg button[aria-pressed="true"] { background: var(--paper-shade); color: var(--ink); font-weight: 600; }
+  .rp-link { text-decoration: underline; padding: 4px 2px; }
+  .rp-seg button:focus-visible, .rp-link:focus-visible { outline: 2px solid var(--accent); }
+  .rp-filters select {
+    font: inherit; font-size: 0.8rem; color: var(--ink); background: var(--paper);
+    border: 1px solid var(--rule); border-radius: 6px; padding: 4px 6px; max-width: 100%;
+  }
+  .rp-chart-title { font-size: 0.85rem; font-weight: 600; margin: 4px 0 2px; }
+  .rp-legend { display: flex; gap: 14px; font-size: 0.78rem; color: var(--ink-soft); margin-bottom: 2px; }
+  .rp-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+  .rp-svg { display: block; width: 100%; overflow: visible; }
+  .rp-svg text { font-family: 'Inter', sans-serif; font-size: 10px; fill: var(--ink-soft); }
+  .rp-svg .grid { stroke: var(--rule); stroke-width: 1; }
+  .rp-svg .base { stroke: var(--ink-soft); stroke-opacity: 0.45; stroke-width: 1; }
+  .rp-svg .bud { stroke: var(--ink-soft); stroke-width: 2; stroke-linecap: round; }
+  .rp-svg .hit { fill: transparent; cursor: default; }
+  .rp-svg .hit:hover, .rp-svg .hit:focus { fill: var(--ink); fill-opacity: 0.06; outline: none; }
+  .rp-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; margin-top: 8px; }
+  .rp-table th, .rp-table td { padding: 5px 6px; text-align: right; border-top: 1px solid var(--rule); }
+  .rp-table th:first-child, .rp-table td:first-child { text-align: left; }
+  .rp-table th { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft); border-top: none; font-weight: 500; }
+  .rp-table td { font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; }
+  .rp-table td:first-child { font-family: 'Inter', sans-serif; }
+  .rp-tip {
+    position: fixed; z-index: 60; pointer-events: none;
+    background: var(--cover); color: var(--paper); border-radius: 6px; padding: 7px 10px;
+    font-size: 0.75rem; box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.5); max-width: 220px;
+  }
+  .rp-tip .t-head { opacity: 0.75; margin-bottom: 3px; }
+  .rp-tip .t-row { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .rp-tip .t-key { width: 10px; height: 3px; border-radius: 2px; flex-shrink: 0; }
+  .rp-tip .t-val { font-weight: 700; font-family: 'IBM Plex Mono', monospace; }
+  .rp-tip .t-name { opacity: 0.8; }
+  .audit-row {
+    padding: 9px 16px;
+    border-top: 1px solid var(--rule);
+    font-size: 0.85rem;
+  }
+  .audit-row:first-child { border-top: none; }
+  .audit-row .audit-line1 {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .audit-row .audit-who {
+    font-weight: 500;
+  }
+  .audit-row .audit-action.add { color: var(--credit); }
+  .audit-row .audit-action.delete { color: var(--debit); }
+  .audit-row .audit-action.edit { color: var(--accent); }
+  .audit-row .audit-detail .was { display: block; margin-top: 1px; text-decoration: line-through; opacity: 0.75; }
+  .audit-row .audit-ts {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--ink-soft);
+    flex-shrink: 0;
+  }
+  .audit-row .audit-detail {
+    color: var(--ink-soft);
+    font-size: 0.8rem;
+    margin-top: 2px;
+  }
+  .audit-row .audit-detail .amt {
+    font-family: 'IBM Plex Mono', monospace;
+    color: var(--ink);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .cat-panel, .day-detail { animation: unfold 140ms ease-out; }
+  }
+  @keyframes unfold { from { opacity: 0; } to { opacity: 1; } }
+
+  @media (max-width: 420px) {
+    .add-form input[name="date"] { width: 108px; }
+    .stat { flex-basis: 33%; padding: 10px 10px; }
+    .month-label { min-width: 0; font-size: 1.02rem; }
+  }
+
+  /* Wider viewports: let the ledger fill the browser window instead of
+     staying pinned to phone width, and lay expense groups out as a grid
+     that gains columns as the window grows. */
+  @media (min-width: 760px) {
+    body { padding-block: 48px; padding-inline: 28px; }
+    .sheet { max-width: none; }
+    .section { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); align-items: start; gap: 16px 16px; }
+    .section .section-label { grid-column: 1 / -1; margin-bottom: 0; }
+    .section .group { margin-bottom: 0; }
+  }
+
+  @media (min-width: 1300px) {
+    body { padding-inline: 40px; }
+    .section { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+  }
+</style>
+</head>
+<body>
+
+<div class="sheet">
+  <div class="masthead">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M4 5.5c2.2-1.1 5.2-1.1 8 .8 2.8-1.9 5.8-1.9 8-.8v13c-2.2-1.1-5.2-1.1-8 .8-2.8-1.9-5.8-1.9-8-.8z"></path>
+      <line x1="12" y1="6.3" x2="12" y2="19.3"></line>
+    </svg>
+    <h1>de Streel Household Ledger</h1>
+  </div>
+  <div class="month-bar">
+    <div class="month-nav">
+      <button type="button" class="arrow" data-action="prev-month" aria-label="Previous month"></button>
+      <span class="month-label" id="month-label">—</span>
+      <button type="button" class="arrow" data-action="next-month" aria-label="Next month"></button>
+      <button type="button" class="today-btn" id="today-btn" data-action="jump-today" hidden>Today</button>
+      <span class="current-date" id="current-date"></span>
+    </div>
+    <div class="export-menu">
+      <button type="button" class="export-btn" data-action="toggle-export-menu" aria-haspopup="true" aria-expanded="false">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"></path><polyline points="7 10 12 15 17 10"></polyline><path d="M5 21h14"></path></svg>
+        Export
+      </button>
+      <div class="export-dropdown" id="export-dropdown" hidden>
+        <button type="button" data-action="export-csv">Export Monthly Report</button>
+        <button type="button" data-action="export-all">Export All History</button>
+        <button type="button" data-action="export-audit">Export Audit Log</button>
+      </div>
+    </div>
+  </div>
+  <div class="sync-bar">
+    <div class="sync-status">
+      <span class="sync-dot" id="sync-dot"></span>
+      <span id="sync-label">Not connected — saving to this PC only</span>
+    </div>
+    <div class="sync-actions">
+      <button type="button" class="sync-btn" id="sync-connect-btn" data-action="connect-drive">Connect Google Drive</button>
+      <button type="button" class="sync-link" id="sync-disconnect-btn" data-action="disconnect-drive" hidden>Disconnect</button>
+    </div>
+  </div>
+  <div class="share-row" id="share-row" hidden>
+    <input type="email" id="share-email" placeholder="Share with a Google account (email)" autocomplete="off">
+    <button type="button" class="sync-btn" data-action="share-file">Share</button>
+    <span class="share-msg" id="share-msg"></span>
+  </div>
+  <div class="summary-strip">
+    <div class="stat credit">
+      <div class="label">Income</div>
+      <div class="value" id="income-total">$0.00</div>
+    </div>
+    <div class="stat debit">
+      <div class="label">Expenses</div>
+      <div class="value" id="expenses-total">$0.00</div>
+    </div>
+    <div class="stat net" id="net-stat">
+      <div class="label">Net</div>
+      <div class="value" id="net-total">$0.00</div>
+    </div>
+  </div>
+  <div id="load-error" class="load-error" hidden></div>
+  <div class="body-scroll">
+    <div id="ledger-root"><div class="loading-row">Opening the ledger…</div></div>
+  </div>
+  <div class="footer">
+    <button type="button" data-action="open-report">Reports</button>
+    <button type="button" data-action="open-audit">Audit Log</button>
+  </div>
+</div>
+
+<div class="audit-overlay" id="audit-overlay" hidden>
+  <div class="audit-card">
+    <div class="audit-header">
+      <span>Audit Log</span>
+      <button type="button" class="audit-close" data-action="close-audit" aria-label="Close audit log">&times;</button>
+    </div>
+    <div class="audit-body" id="audit-body">
+      <div class="empty-note">Opening…</div>
+    </div>
+  </div>
+</div>
+
+<div class="audit-overlay" id="report-overlay" hidden>
+  <div class="audit-card report-card" role="dialog" aria-label="Reports">
+    <div class="audit-header">
+      <span>Reports</span>
+      <button type="button" class="audit-close" data-action="close-report" aria-label="Close reports">&times;</button>
+    </div>
+    <div class="report-tabs" role="tablist">
+      <button type="button" role="tab" data-action="report-tab" data-tab="budget">Budget</button>
+      <button type="button" role="tab" data-action="report-tab" data-tab="trends">Trends</button>
+    </div>
+    <div class="audit-body report-body" id="report-body"></div>
+  </div>
+</div>
+<div class="rp-tip" id="rp-tip" hidden></div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---- Fill this in after creating your OAuth Client ID in Google Cloud Console ----
+  var GOOGLE_CLIENT_ID = "437947192510-2q560enpkqomuuaj2nmvbemnpoi4m41o.apps.googleusercontent.com";
+  // Full Drive scope (not drive.file) so a second Google account you share
+  // the ledger file with can find and open it too, via Share below.
+  var DRIVE_SCOPE = "https://www.googleapis.com/auth/drive";
+  var DRIVE_FILE_NAME = "household-ledger.json";
+  var DRIVE_AUDIT_FILE_NAME = "household-ledger-audit.json";
+
+  var LEDGERS = [
+    {
+      key: "income",
+      tone: "credit",
+      sectionLabel: "Income",
+      addLabel: "Add income",
+      deleteLabel: "Delete income entry",
+      groups: [
+        { name: null, categories: ["Salary / Wages"] }
+      ]
+    },
+    {
+      key: "expenses",
+      tone: "debit",
+      sectionLabel: "Expenses",
+      addLabel: "Add purchase",
+      deleteLabel: "Delete purchase",
+      groups: [
+        { name: "House", categories: ["Property Tax", "Home Insurance"] },
+        { name: "Utilities", categories: ["Electricity", "Propane", "Trash", "Internet / Phone"] },
+        { name: "Transportation", categories: ["Car Upkeep", "Gas / Fuel", "Auto Insurance"] },
+        { name: "Food", categories: ["Groceries", "Dining Out"] },
+        { name: "Health & Insurance", categories: ["Health Insurance", "Medical / Prescriptions"] },
+        { name: "Debt", categories: ["Credit Card Payment", "Loans"] },
+        { name: "Savings & Goals", categories: ["Emergency Fund", "Retirement Savings", "Other Savings Goal"] },
+        { name: "Personal & Lifestyle", categories: ["Subscriptions", "Personal Care", "Clothing", "Household Supplies", "Pet expenses", "Miscellaneous"] }
+      ]
+    }
+  ];
+
+  var RECUR_CATEGORIES = { "Salary / Wages": true, "Subscriptions": true, "Internet / Phone": true };
+  var DEBT_GROUP_NAME = "Debt";
+
+  var MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+  var LS_DATA_KEY = "household-ledger-purchases-v2";
+  var LS_MODE_KEY = "household-ledger-storage-mode";
+  var LS_FILEID_KEY = "household-ledger-drive-file-id";
+  var LS_AUDIT_FILEID_KEY = "household-ledger-drive-audit-file-id";
+
+  var now = new Date();
+
+  var state = { data: emptyData(), loaded: false, loadError: "" };
+  var openCategory = null;
+  var addingCategory = null;
+  var editingEntry = null;
+  var addingCard = false;
+  var editingCardId = null;
+  var editingBudgetCat = null;
+  var selectedYear = now.getFullYear();
+  var selectedMonth = now.getMonth();
+  var auditLog = [];
+  var auditOpen = false;
+  var auditLoading = false;
+  var reportOpen = false;
+  var reportTab = "budget";
+  var reportMonths = 12;
+  var reportCat = "";
+  var reportTable = false;
+  var reportChartData = {};
+
+  var drive = {
+    status: "disconnected", // disconnected | connecting | connected | syncing | error
+    message: "",
+    tokenClient: null,
+    accessToken: null,
+    fileId: localStorage.getItem(LS_FILEID_KEY) || null,
+    auditFileId: localStorage.getItem(LS_AUDIT_FILEID_KEY) || null,
+    userName: "",
+    pendingWrite: false,
+    pollTimer: null
+  };
+
+  var ledgerRoot = document.getElementById("ledger-root");
+  var incomeTotalEl = document.getElementById("income-total");
+  var expensesTotalEl = document.getElementById("expenses-total");
+  var netTotalEl = document.getElementById("net-total");
+  var netStatEl = document.getElementById("net-stat");
+  var loadErrorEl = document.getElementById("load-error");
+  var monthLabelEl = document.getElementById("month-label");
+  var todayBtnEl = document.getElementById("today-btn");
+  var currentDateEl = document.getElementById("current-date");
+  currentDateEl.textContent = "Today " + now.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  var syncDotEl = document.getElementById("sync-dot");
+  var syncLabelEl = document.getElementById("sync-label");
+  var connectBtnEl = document.getElementById("sync-connect-btn");
+  var disconnectBtnEl = document.getElementById("sync-disconnect-btn");
+  var shareRowEl = document.getElementById("share-row");
+  var shareEmailEl = document.getElementById("share-email");
+  var shareMsgEl = document.getElementById("share-msg");
+  var auditOverlayEl = document.getElementById("audit-overlay");
+  var auditBodyEl = document.getElementById("audit-body");
+  var exportDropdownEl = document.getElementById("export-dropdown");
+  var reportOverlayEl = document.getElementById("report-overlay");
+  var reportBodyEl = document.getElementById("report-body");
+  var reportTipEl = document.getElementById("rp-tip");
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  function pad2(n) { return n < 10 ? "0" + n : "" + n; }
+  function todayISO() { return new Date().toISOString().slice(0, 10); }
+  function isCurrentSystemMonth() { return selectedYear === now.getFullYear() && selectedMonth === now.getMonth(); }
+  function defaultEntryDate() {
+    if (isCurrentSystemMonth()) return todayISO();
+    return selectedYear + "-" + pad2(selectedMonth + 1) + "-01";
+  }
+  function parseISO(iso) {
+    var parts = iso.split("-");
+    return { y: Number(parts[0]), m: Number(parts[1]) - 1, d: Number(parts[2]) };
+  }
+  function inSelectedMonth(iso) {
+    var p = parseISO(iso);
+    return p.y === selectedYear && p.m === selectedMonth;
+  }
+  function formatMoney(n) {
+    var v = Number(n) || 0;
+    return v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  function formatDate(iso) {
+    if (!iso) return "";
+    var p = parseISO(iso);
+    return pad2(p.m + 1) + "/" + pad2(p.d) + "/" + String(p.y).slice(2);
+  }
+  function makeId() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    return "p" + Date.now() + Math.random().toString(16).slice(2);
+  }
+  function formatTimestamp(iso) {
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" }) + " " +
+      d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  }
+
+  var ICONS = {
+    chevronRight: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>',
+    chevronDown: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>',
+    chevronLeft: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 6 9 12 15 18"></polyline></svg>',
+    plus: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>',
+    trash: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"></path><path d="M9 7V4h6v3"></path><path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>',
+    repeat: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l4 4-4 4"></path><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><path d="M7 22l-4-4 4-4"></path><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>',
+    repeatOff: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l4 4-4 4"></path><path d="M3 11V9a4 4 0 0 1 4-4h11"></path><path d="M7 22l-4-4 4-4"></path><path d="M21 13v2a4 4 0 0 1-4 4H6"></path><line x1="2" y1="2" x2="22" y2="22"></line></svg>',
+    pencil: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"></path></svg>'
+  };
+
+  document.querySelector('[data-action="prev-month"]').innerHTML = ICONS.chevronLeft;
+  document.querySelector('[data-action="next-month"]').innerHTML = ICONS.chevronRight;
+
+  function ledgerData(ledgerKey) { return state.data[ledgerKey] || {}; }
+
+  function monthList(ledgerKey, cat) {
+    var list = ledgerData(ledgerKey)[cat] || [];
+    return list.filter(function (p) { return inSelectedMonth(p.date); });
+  }
+
+  function categoryTotal(ledgerKey, cat) {
+    var list = monthList(ledgerKey, cat);
+    var sum = 0;
+    for (var i = 0; i < list.length; i++) sum += Number(list[i].amount) || 0;
+    return sum;
+  }
+
+  function groupTotal(ledgerKey, group) {
+    var sum = 0;
+    for (var i = 0; i < group.categories.length; i++) sum += categoryTotal(ledgerKey, group.categories[i]);
+    return sum;
+  }
+
+  function ledgerTotal(ledgerKey) {
+    var data = ledgerData(ledgerKey);
+    var sum = 0;
+    for (var cat in data) sum += categoryTotal(ledgerKey, cat);
+    return sum;
+  }
+
+  function renderPurchaseRow(ledger, cat, p, opts) {
+    opts = opts || {};
+    var showCat = !!opts.showCat;
+    var recurBadge = p.seriesId ? ' <span class="recur-badge" title="Repeats monthly on day ' + p.recurDay + '">' + ICONS.repeat + '</span>' : '';
+    return (
+      '<div class="purchase-row' + (opts.flush ? ' flush' : '') + '" data-tone="' + ledger.tone + '">' +
+        (showCat ? '' : '<span class="date">' + escapeHtml(formatDate(p.date)) + '</span>') +
+        (showCat ? '<span class="cat-tag">' + escapeHtml(cat) + '</span>' : '') +
+        '<span class="desc">' + escapeHtml(p.description) + recurBadge + '</span>' +
+        '<span class="amt">$' + formatMoney(p.amount) + '</span>' +
+        (p.seriesId ? '<button type="button" class="stop-recur" data-action="stop-recur" data-ledger="' + ledger.key + '" data-cat="' + escapeHtml(cat) + '" data-series="' + escapeHtml(p.seriesId) + '" title="Stop repeating monthly">' + ICONS.repeatOff + '</button>' : '') +
+        '<button type="button" class="edit-btn" data-action="edit-entry" data-ledger="' + ledger.key + '" data-cat="' + escapeHtml(cat) + '" data-id="' + escapeHtml(p.id) + '" aria-label="Edit entry">' + ICONS.pencil + '</button>' +
+        '<button type="button" class="del" data-action="delete-entry" data-ledger="' + ledger.key + '" data-cat="' + escapeHtml(cat) + '" data-id="' + escapeHtml(p.id) + '" aria-label="' + escapeHtml(ledger.deleteLabel) + '">' + ICONS.trash + '</button>' +
+      '</div>'
+    );
+  }
+
+  function renderEditForm(ledger, cat, p) {
+    return (
+      '<form class="add-form" data-ledger="' + ledger.key + '" data-cat="' + escapeHtml(cat) + '" data-id="' + escapeHtml(p.id) + '" data-role="edit-form">' +
+        '<input type="date" name="date" value="' + escapeHtml(p.date) + '" required>' +
+        '<input type="text" name="description" value="' + escapeHtml(p.description) + '" autocomplete="off" required>' +
+        '<input type="number" name="amount" step="0.01" min="0.01" value="' + escapeHtml(p.amount) + '" required>' +
+        '<button type="submit">Save</button>' +
+        '<button type="button" class="cancel" data-action="cancel-edit">Cancel</button>' +
+      '</form>'
+    );
+  }
+
+  function renderAddForm(ledger, cat) {
+    var recurField = RECUR_CATEGORIES[cat]
+      ? '<label class="recur-check"><input type="checkbox" name="recurring"> Repeats monthly</label>'
+      : '';
+    return (
+      '<form class="add-form" data-ledger="' + ledger.key + '" data-cat="' + escapeHtml(cat) + '" data-role="add-form">' +
+        '<input type="date" name="date" value="' + defaultEntryDate() + '" required>' +
+        '<input type="text" name="description" placeholder="Description" autocomplete="off" required>' +
+        '<input type="number" name="amount" step="0.01" min="0.01" placeholder="0.00" required>' +
+        recurField +
+        '<button type="submit">Add</button>' +
+        '<button type="button" class="cancel" data-action="cancel-add" data-ledger="' + ledger.key + '" data-cat="' + escapeHtml(cat) + '">Cancel</button>' +
+      '</form>'
+    );
+  }
+
+  function renderCardRow(card) {
+    var autopayBadge = card.autopay ? ' <span class="cc-autopay-badge">Autopay</span>' : '';
+    return (
+      '<div class="cc-row">' +
+        '<div class="cc-row-top">' +
+          '<span class="cc-name">' + escapeHtml(card.name) + '</span>' +
+          '<button type="button" class="edit-btn" data-action="edit-card" data-id="' + escapeHtml(card.id) + '" aria-label="Edit account">' + ICONS.pencil + '</button>' +
+          '<button type="button" class="del" data-action="delete-card" data-id="' + escapeHtml(card.id) + '" aria-label="Delete account">' + ICONS.trash + '</button>' +
+        '</div>' +
+        '<div class="cc-row-meta">Balance $' + formatMoney(card.balance) + ' &middot; Min $' + formatMoney(card.minPayment) + autopayBadge + '</div>' +
+      '</div>'
+    );
+  }
+
+  function renderCardForm(role, card) {
+    card = card || { id: "", name: "", balance: "", minPayment: "", autopay: false };
+    return (
+      '<form class="add-form cc-form" data-role="' + role + '" data-id="' + escapeHtml(card.id) + '">' +
+        '<input type="text" name="name" placeholder="Account name" value="' + escapeHtml(card.name) + '" autocomplete="off" required>' +
+        '<input type="number" name="balance" step="0.01" min="0" placeholder="Balance" value="' + escapeHtml(card.balance) + '" required>' +
+        '<input type="number" name="minPayment" step="0.01" min="0" placeholder="Min payment" value="' + escapeHtml(card.minPayment) + '" required>' +
+        '<label class="recur-check"><input type="checkbox" name="autopay"' + (card.autopay ? " checked" : "") + '> Autopay</label>' +
+        '<button type="submit">' + (role === "edit-card-form" ? "Save" : "Add") + '</button>' +
+        '<button type="button" class="cancel" data-action="' + (role === "edit-card-form" ? "cancel-edit-card" : "cancel-add-card") + '">Cancel</button>' +
+      '</form>'
+    );
+  }
+
+  function renderCreditCardsPanel(cat, paidThisMonth) {
+    var cards = creditCardsFor(cat);
+    var totalBalance = 0, totalMinPayment = 0, manualMinPayment = 0;
+    for (var i = 0; i < cards.length; i++) {
+      totalBalance += Number(cards[i].balance) || 0;
+      totalMinPayment += Number(cards[i].minPayment) || 0;
+      if (!cards[i].autopay) manualMinPayment += Number(cards[i].minPayment) || 0;
+    }
+    var html = '<div class="cc-panel">';
+    html += '<div class="cc-summary">';
+    html += '<div><span class="cc-summary-label">Total balance due</span><span class="cc-summary-value">$' + formatMoney(totalBalance) + '</span></div>';
+    html += '<div><span class="cc-summary-label">Minimum due this month</span><span class="cc-summary-value">$' + formatMoney(totalMinPayment) + '</span></div>';
+    html += '</div>';
+    if (cards.length && manualMinPayment > 0) {
+      var shortfall = manualMinPayment - paidThisMonth;
+      html += shortfall > 0.004
+        ? '<div class="cc-status short">$' + formatMoney(shortfall) + ' short of this month\'s minimum payments not on autopay</div>'
+        : '<div class="cc-status ok">Minimum payments covered this month</div>';
+    }
+    if (cards.length) {
+      html += '<div class="cc-list">';
+      for (var j = 0; j < cards.length; j++) {
+        html += editingCardId === cards[j].id ? renderCardForm("edit-card-form", cards[j]) : renderCardRow(cards[j]);
+      }
+      html += '</div>';
+    }
+    html += addingCard
+      ? renderCardForm("add-card-form")
+      : '<button type="button" class="add-toggle" data-action="show-add-card">' + ICONS.plus + ' Add account</button>';
+    html += '</div>';
+    return html;
+  }
+
+  function budgetFor(ledger, cat) {
+    if (ledger.key !== "expenses") return 0;
+    var b = Number(state.data.budgets && state.data.budgets[cat]);
+    return b > 0 ? b : 0;
+  }
+
+  function renderBudgetRow(cat, spent, budget) {
+    if (editingBudgetCat === cat) {
+      return (
+        '<form class="add-form budget-form" data-role="budget-form" data-cat="' + escapeHtml(cat) + '">' +
+          '<input type="number" name="budget" step="0.01" min="0.01" placeholder="Monthly budget" value="' + (budget ? escapeHtml(budget) : '') + '" required>' +
+          '<button type="submit">Save</button>' +
+          (budget ? '<button type="button" class="cancel" data-action="clear-budget" data-cat="' + escapeHtml(cat) + '">Remove</button>' : '') +
+          '<button type="button" class="cancel" data-action="cancel-budget">Cancel</button>' +
+        '</form>'
+      );
+    }
+    if (!budget) {
+      return '<button type="button" class="add-toggle" data-action="edit-budget" data-cat="' + escapeHtml(cat) + '">' + ICONS.plus + ' Set monthly budget</button>';
+    }
+    var left = budget - spent;
+    return (
+      '<div class="budget-row">' +
+        '<span class="budget-label">Monthly budget <span class="budget-amt">$' + formatMoney(budget) + '</span> &middot; ' +
+          (left < 0 ? '$' + formatMoney(-left) + ' over' : '$' + formatMoney(left) + ' left') + '</span>' +
+        '<button type="button" class="edit-btn" data-action="edit-budget" data-cat="' + escapeHtml(cat) + '" aria-label="Edit budget">' + ICONS.pencil + '</button>' +
+      '</div>'
+    );
+  }
+
+  function renderCategory(ledger, cat) {
+    var list = monthList(ledger.key, cat);
+    var isOpen = openCategory && openCategory.ledger === ledger.key && openCategory.cat === cat;
+    var isAdding = addingCategory && addingCategory.ledger === ledger.key && addingCategory.cat === cat;
+    var total = categoryTotal(ledger.key, cat);
+    var budget = budgetFor(ledger, cat);
+    var html = '<div class="cat">';
+    html += '<button type="button" class="cat-header' + (budget ? ' has-budget' : '') + '" data-action="toggle-category" data-ledger="' + ledger.key + '" data-cat="' + escapeHtml(cat) + '" data-tone="' + ledger.tone + '" data-hastotal="' + (total > 0 ? "true" : "false") + '">';
+    html += '<span class="left"><span class="chevron">' + (isOpen ? ICONS.chevronDown : ICONS.chevronRight) + '</span>';
+    html += '<span class="name">' + escapeHtml(cat) + '</span>';
+    if (list.length) html += '<span class="count">(' + list.length + ')</span>';
+    if (budget) {
+      var over = total > budget + 0.004;
+      html += '<span class="budget-note' + (over ? ' over' : '') + '">' + (over ? '$' + formatMoney(total - budget) + ' over' : '$' + formatMoney(budget - total) + ' left') + '</span>';
+    }
+    html += '</span>';
+    html += '<span class="amt">$' + formatMoney(total) + '</span>';
+    if (budget) {
+      html += '<span class="budget-bar' + (total > budget + 0.004 ? ' over' : '') + '" aria-hidden="true"><span style="width:' + Math.min(100, total / budget * 100).toFixed(1) + '%"></span></span>';
+    }
+    html += '</button>';
+
+    if (isOpen) {
+      html += '<div class="cat-panel">';
+      if (ledger.key === "expenses") html += renderBudgetRow(cat, total, budget);
+      if (categoryGroupName(ledger, cat) === DEBT_GROUP_NAME) html += renderCreditCardsPanel(cat, total);
+      for (var i = 0; i < list.length; i++) {
+        var isEditing = editingEntry && editingEntry.ledger === ledger.key && editingEntry.cat === cat && editingEntry.id === list[i].id;
+        html += isEditing ? renderEditForm(ledger, cat, list[i]) : renderPurchaseRow(ledger, cat, list[i]);
+      }
+      if (isAdding) {
+        html += renderAddForm(ledger, cat);
+      } else {
+        html += '<button type="button" class="add-toggle" data-action="show-add" data-ledger="' + ledger.key + '" data-cat="' + escapeHtml(cat) + '">' + ICONS.plus + ' ' + escapeHtml(ledger.addLabel) + '</button>';
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function renderGroup(ledger, group) {
+    var html = '<div class="group">';
+    if (group.name) {
+      html += '<div class="group-header"><span>' + escapeHtml(group.name) + '</span><span class="amt">$' + formatMoney(groupTotal(ledger.key, group)) + '</span></div>';
+    }
+    for (var i = 0; i < group.categories.length; i++) html += renderCategory(ledger, group.categories[i]);
+    html += '</div>';
+    return html;
+  }
+
+  function renderLedgerSection(ledger) {
+    var html = '<div class="section">';
+    html += '<div class="section-label">' + escapeHtml(ledger.sectionLabel) + '</div>';
+    for (var i = 0; i < ledger.groups.length; i++) html += renderGroup(ledger, ledger.groups[i]);
+    html += '</div>';
+    return html;
+  }
+
+  function renderListView() {
+    var html = "";
+    for (var i = 0; i < LEDGERS.length; i++) html += renderLedgerSection(LEDGERS[i]);
+    return html;
+  }
+
+  function daysInSelectedMonth() { return new Date(selectedYear, selectedMonth + 1, 0).getDate(); }
+
+  // ---------- CSV export ----------
+
+  function csvField(value) {
+    var s = value === null || value === undefined ? "" : String(value);
+    if (/[",\r\n]/.test(s)) s = '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  }
+
+  function categoryGroupName(ledger, cat) {
+    for (var i = 0; i < ledger.groups.length; i++) {
+      if (ledger.groups[i].categories.indexOf(cat) !== -1) return ledger.groups[i].name || "";
+    }
+    return "";
+  }
+
+  function buildCsv(monthOnly) {
+    var rows = [];
+    LEDGERS.forEach(function (ledger) {
+      var data = ledgerData(ledger.key);
+      for (var cat in data) {
+        (data[cat] || []).forEach(function (p) {
+          if (monthOnly && !inSelectedMonth(p.date)) return;
+          rows.push({
+            date: p.date,
+            ledger: ledger.sectionLabel,
+            group: categoryGroupName(ledger, cat),
+            category: cat,
+            description: p.description,
+            amount: Number(p.amount) || 0,
+            recurring: p.seriesId ? "Yes" : "No"
+          });
+        });
+      }
+    });
+    rows.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+
+    var lines = [["Date", "Ledger", "Group", "Category", "Description", "Amount", "Recurring"].join(",")];
+    rows.forEach(function (r) {
+      lines.push([
+        csvField(r.date), csvField(r.ledger), csvField(r.group), csvField(r.category),
+        csvField(r.description), csvField(r.amount.toFixed(2)), csvField(r.recurring)
+      ].join(","));
+    });
+    return lines.join("\r\n");
+  }
+
+  function downloadCsv(csv, filename) {
+    var blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function exportCsv() {
+    var filename = "household-ledger-" + selectedYear + "-" + pad2(selectedMonth + 1) + ".csv";
+    downloadCsv(buildCsv(true), filename);
+  }
+
+  function exportAllCsv() {
+    downloadCsv(buildCsv(false), "household-ledger-all-" + todayISO() + ".csv");
+  }
+
+  function buildAuditCsv() {
+    var lines = [["Timestamp", "User", "Action", "Ledger", "Category", "Description", "Amount", "Date", "Previous Description", "Previous Amount", "Previous Date"].join(",")];
+    auditLog.forEach(function (e) {
+      var prev = e.previous || {};
+      lines.push([
+        csvField(formatTimestamp(e.ts)), csvField(e.user), csvField(e.action),
+        csvField(e.ledger === "income" ? "Income" : "Expenses"), csvField(e.category), csvField(e.description),
+        csvField((Number(e.amount) || 0).toFixed(2)), csvField(e.date),
+        csvField(prev.description || ""), csvField(prev.amount !== undefined ? Number(prev.amount).toFixed(2) : ""), csvField(prev.date || "")
+      ].join(","));
+    });
+    return lines.join("\r\n");
+  }
+
+  async function exportAuditLog() {
+    if (drive.status === "connected" || drive.status === "syncing") {
+      try {
+        var data = await readDriveJson(drive.auditFileId);
+        auditLog = (data && data.entries) || [];
+      } catch (e) { /* export whatever is already cached */ }
+    }
+    downloadCsv(buildAuditCsv(), "household-ledger-audit-" + todayISO() + ".csv");
+  }
+
+  // ---------- Reports (budget vs actual, trends) ----------
+
+  var SHORT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+  function money0(n) { return "$" + Math.round(n).toLocaleString("en-US"); }
+
+  function expenseCategories() {
+    var out = [];
+    LEDGERS.forEach(function (l) {
+      if (l.key !== "expenses") return;
+      l.groups.forEach(function (g) { g.categories.forEach(function (c) { out.push({ cat: c, group: g.name }); }); });
+    });
+    return out;
+  }
+
+  // The n months ending at the currently selected month, oldest first.
+  function reportMonthKeys(n) {
+    var out = [];
+    var y = selectedYear, m = selectedMonth;
+    for (var i = 0; i < n; i++) {
+      out.unshift({ y: y, m: m, key: monthKeyOf(y, m) });
+      m -= 1;
+      if (m < 0) { m = 11; y -= 1; }
+    }
+    return out;
+  }
+
+  // One pass over all entries -> { income: {key: total}, expenses: {key: total}, byCat: {cat: {key: total}} }
+  function collectMonthly() {
+    var res = { income: {}, expenses: {}, byCat: {} };
+    LEDGERS.forEach(function (ledger) {
+      var data = ledgerData(ledger.key);
+      for (var cat in data) {
+        (data[cat] || []).forEach(function (p) {
+          var key = String(p.date || "").slice(0, 7);
+          var amt = Number(p.amount) || 0;
+          res[ledger.key][key] = (res[ledger.key][key] || 0) + amt;
+          if (ledger.key === "expenses") {
+            res.byCat[cat] = res.byCat[cat] || {};
+            res.byCat[cat][key] = (res.byCat[cat][key] || 0) + amt;
+          }
+        });
+      }
+    });
+    return res;
+  }
+
+  function niceScale(max) {
+    if (!(max > 0)) return { max: 100, step: 25 };
+    var raw = max / 4;
+    var mag = Math.pow(10, Math.floor(Math.log(raw) / Math.LN10));
+    var norm = raw / mag;
+    var step = (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10) * mag;
+    return { max: Math.ceil(max / step) * step, step: step };
+  }
+
+  function roundedTopBar(x, y, w, h) {
+    x = Number(x); y = Number(y);
+    if (h <= 0) return "";
+    var r = Math.min(4, w / 2, h);
+    return '<path d="M' + x + ',' + (y + h) + 'V' + (y + r) + 'Q' + x + ',' + y + ' ' + (x + r) + ',' + y +
+      'H' + (x + w - r) + 'Q' + (x + w) + ',' + y + ' ' + (x + w) + ',' + (y + r) + 'V' + (y + h) + 'Z"';
+  }
+
+  // Grouped columns. series: [{name, color, values}], opts.budget draws a reference line.
+  function renderColumns(chartId, width, labels, series, opts) {
+    opts = opts || {};
+    var H = 200, mL = 50, mR = 8, mT = 10, mB = 32;
+    var plotW = Math.max(120, width - mL - mR), plotH = H - mT - mB;
+    var max = opts.budget || 0;
+    series.forEach(function (sr) { sr.values.forEach(function (v) { if (v > max) max = v; }); });
+    var scale = niceScale(max);
+    var n = labels.length, slot = plotW / n;
+    var barW = Math.min(24, Math.max(4, (slot - 8) / series.length - 2));
+    var groupW = series.length * barW + (series.length - 1) * 2;
+    function y(v) { return mT + plotH - (v / scale.max) * plotH; }
+
+    reportChartData[chartId] = { labels: labels.map(function (l) { return l.full; }), series: series, budget: opts.budget || 0 };
+
+    var svg = '<svg class="rp-svg" viewBox="0 0 ' + width + ' ' + H + '" width="' + width + '" height="' + H + '" role="img" aria-label="' + escapeHtml(opts.aria || "") + '">';
+    for (var t = 0; t <= scale.max + 0.001; t += scale.step) {
+      svg += '<line class="' + (t === 0 ? 'base' : 'grid') + '" x1="' + mL + '" x2="' + (width - mR) + '" y1="' + y(t).toFixed(1) + '" y2="' + y(t).toFixed(1) + '"></line>';
+      svg += '<text x="' + (mL - 6) + '" y="' + (y(t) + 3).toFixed(1) + '" text-anchor="end">' + money0(t) + '</text>';
+    }
+    for (var i = 0; i < n; i++) {
+      var gx = mL + slot * i + (slot - groupW) / 2;
+      series.forEach(function (sr, si) {
+        var v = sr.values[i] || 0;
+        var bh = (v / scale.max) * plotH;
+        var bar = roundedTopBar((gx + si * (barW + 2)).toFixed(1), y(v).toFixed(1), barW, bh);
+        if (bar) svg += bar + ' style="fill:' + sr.color + '"></path>';
+      });
+      svg += '<text x="' + (mL + slot * i + slot / 2).toFixed(1) + '" y="' + (H - 16) + '" text-anchor="middle">' + escapeHtml(labels[i].short) + '</text>';
+      if (labels[i].year) svg += '<text x="' + (mL + slot * i + slot / 2).toFixed(1) + '" y="' + (H - 4) + '" text-anchor="middle">' + escapeHtml(labels[i].year) + '</text>';
+    }
+    if (opts.budget) {
+      svg += '<line class="bud" x1="' + mL + '" x2="' + (width - mR) + '" y1="' + y(opts.budget).toFixed(1) + '" y2="' + y(opts.budget).toFixed(1) + '"></line>';
+      svg += '<text x="' + (width - mR) + '" y="' + (y(opts.budget) - 5).toFixed(1) + '" text-anchor="end">Budget ' + money0(opts.budget) + '</text>';
+    }
+    // hit targets: one full-height slot per month, bigger than the marks
+    for (var j = 0; j < n; j++) {
+      svg += '<rect class="hit" tabindex="0" data-chart="' + chartId + '" data-i="' + j + '" x="' + (mL + slot * j).toFixed(1) + '" y="' + mT + '" width="' + slot.toFixed(1) + '" height="' + plotH + '"></rect>';
+    }
+    return svg + '</svg>';
+  }
+
+  function renderReportBudget() {
+    var rows = [], unbudgeted = [], budgeted = 0, spentB = 0;
+    var exp = LEDGERS.filter(function (l) { return l.key === "expenses"; })[0];
+    expenseCategories().forEach(function (c) {
+      var spent = categoryTotal("expenses", c.cat);
+      var b = budgetFor(exp, c.cat);
+      if (b) { rows.push({ cat: c.cat, spent: spent, budget: b }); budgeted += b; spentB += spent; }
+      else if (spent > 0) unbudgeted.push({ cat: c.cat, spent: spent });
+    });
+    var html = '<div class="rp-sub">' + escapeHtml(MONTH_NAMES[selectedMonth] + " " + selectedYear) + '</div>';
+    if (!rows.length) {
+      return html + '<div class="empty-note">No budgets set yet. Open an expense category and choose &ldquo;Set monthly budget&rdquo;.</div>' + renderUnbudgeted(unbudgeted);
+    }
+    var left = budgeted - spentB;
+    html += '<div class="rp-tiles">' +
+      '<div><span class="rp-tile-label">Budgeted</span><span class="rp-tile-value">$' + formatMoney(budgeted) + '</span></div>' +
+      '<div><span class="rp-tile-label">Spent</span><span class="rp-tile-value">$' + formatMoney(spentB) + '</span></div>' +
+      '<div><span class="rp-tile-label">' + (left < 0 ? 'Over' : 'Left') + '</span><span class="rp-tile-value' + (left < 0 ? ' over' : '') + '">$' + formatMoney(Math.abs(left)) + '</span></div>' +
+      '</div>';
+    rows.sort(function (a, b) { return b.spent / b.budget - a.spent / a.budget; });
+    rows.forEach(function (r) {
+      var over = r.spent > r.budget + 0.004;
+      html += '<div class="rp-row"><div class="rp-row-top"><span class="name">' + escapeHtml(r.cat) + '</span>' +
+        '<span class="rp-num">$' + formatMoney(r.spent) + ' / $' + formatMoney(r.budget) + '</span></div>' +
+        '<div class="rp-meter' + (over ? ' over' : '') + '"><span style="width:' + Math.min(100, r.spent / r.budget * 100).toFixed(1) + '%"></span></div>' +
+        '<div class="rp-status' + (over ? ' over' : '') + '">' + (over ? '$' + formatMoney(r.spent - r.budget) + ' over' : '$' + formatMoney(r.budget - r.spent) + ' left') +
+        ' &middot; ' + Math.round(r.spent / r.budget * 100) + '% used</div></div>';
+    });
+    return html + renderUnbudgeted(unbudgeted);
+  }
+
+  function renderUnbudgeted(list) {
+    if (!list.length) return "";
+    list.sort(function (a, b) { return b.spent - a.spent; });
+    var total = 0, html = "";
+    list.forEach(function (r) {
+      total += r.spent;
+      html += '<div class="rp-row"><div class="rp-row-top"><span class="name">' + escapeHtml(r.cat) + '</span><span class="rp-num">$' + formatMoney(r.spent) + '</span></div></div>';
+    });
+    return '<div class="rp-h">No budget set &middot; $' + formatMoney(total) + '</div>' + html;
+  }
+
+  function renderReportTrends() {
+    reportChartData = {};
+    var width = Math.max(260, (reportBodyEl.clientWidth || 520) - 32);
+    var keys = reportMonthKeys(reportMonths);
+    var labels = keys.map(function (k) {
+      return { short: SHORT_MONTHS[k.m], year: (k.m === 0 || k === keys[0]) ? String(k.y) : "", full: MONTH_NAMES[k.m] + " " + k.y };
+    });
+    var agg = collectMonthly();
+    var inc = keys.map(function (k) { return agg.income[k.key] || 0; });
+    var exp = keys.map(function (k) { return agg.expenses[k.key] || 0; });
+    var expLedger = LEDGERS.filter(function (l) { return l.key === "expenses"; })[0];
+    var catBudget = reportCat ? budgetFor(expLedger, reportCat) : 0;
+    var catVals = keys.map(function (k) { return (reportCat ? (agg.byCat[reportCat] || {}) : agg.expenses)[k.key] || 0; });
+    var catName = reportCat || "All expenses";
+
+    var options = '<option value=""' + (reportCat ? '' : ' selected') + '>All expenses</option>';
+    var lastGroup = null;
+    expenseCategories().forEach(function (c) {
+      if (c.group !== lastGroup) { if (lastGroup !== null) options += '</optgroup>'; options += '<optgroup label="' + escapeHtml(c.group || "") + '">'; lastGroup = c.group; }
+      options += '<option value="' + escapeHtml(c.cat) + '"' + (c.cat === reportCat ? ' selected' : '') + '>' + escapeHtml(c.cat) + '</option>';
+    });
+    if (lastGroup !== null) options += '</optgroup>';
+
+    var html = '<div class="rp-filters">' +
+      '<span class="rp-seg" role="group" aria-label="Time range">' +
+        '<button type="button" data-action="report-months" data-n="6" aria-pressed="' + (reportMonths === 6) + '">6 months</button>' +
+        '<button type="button" data-action="report-months" data-n="12" aria-pressed="' + (reportMonths === 12) + '">12 months</button>' +
+      '</span>' +
+      '<label>Category <select data-action="report-cat" aria-label="Category">' + options + '</select></label>' +
+      '<button type="button" class="rp-link" data-action="report-table">' + (reportTable ? 'Show charts' : 'Show table') + '</button>' +
+      '</div>';
+
+    if (reportTable) {
+      html += '<table class="rp-table"><thead><tr><th>Month</th><th>Income</th><th>Expenses</th><th>Net</th><th>' + escapeHtml(catName) + '</th></tr></thead><tbody>';
+      for (var i = keys.length - 1; i >= 0; i--) {
+        var net = inc[i] - exp[i];
+        html += '<tr><td>' + escapeHtml(labels[i].full) + '</td><td>$' + formatMoney(inc[i]) + '</td><td>$' + formatMoney(exp[i]) + '</td><td>' +
+          (net < 0 ? '-' : '') + '$' + formatMoney(Math.abs(net)) + '</td><td>$' + formatMoney(catVals[i]) + '</td></tr>';
+      }
+      return html + '</tbody></table>' + (catBudget ? '<div class="rp-sub" style="margin-top:8px">Monthly budget for ' + escapeHtml(catName) + ': $' + formatMoney(catBudget) + '</div>' : '');
+    }
+
+    html += '<div class="rp-chart-title">Income vs. expenses</div>' +
+      '<div class="rp-legend"><span><i style="background:var(--series-income)"></i>Income</span><span><i style="background:var(--series-expense)"></i>Expenses</span></div>' +
+      renderColumns("cmp", width, labels, [
+        { name: "Income", color: "var(--series-income)", values: inc },
+        { name: "Expenses", color: "var(--series-expense)", values: exp }
+      ], { aria: "Income versus expenses by month" });
+    html += '<div class="rp-chart-title" style="margin-top:16px">' + escapeHtml(catName) + ' by month</div>' +
+      renderColumns("cat", width, labels, [
+        { name: catName, color: "var(--series-expense)", values: catVals }
+      ], { budget: catBudget, aria: catName + " spending by month" });
+    return html;
+  }
+
+  function renderReport() {
+    var tabs = reportOverlayEl.querySelectorAll('[data-action="report-tab"]');
+    for (var i = 0; i < tabs.length; i++) tabs[i].setAttribute("aria-selected", String(tabs[i].getAttribute("data-tab") === reportTab));
+    reportBodyEl.innerHTML = reportTab === "budget" ? renderReportBudget() : renderReportTrends();
+  }
+
+  function openReport() {
+    reportOpen = true;
+    reportOverlayEl.hidden = false;
+    renderReport();
+  }
+
+  function closeReport() {
+    reportOpen = false;
+    reportOverlayEl.hidden = true;
+    reportTipEl.hidden = true;
+  }
+
+  function showReportTip(hit, ev) {
+    var data = reportChartData[hit.getAttribute("data-chart")];
+    var i = Number(hit.getAttribute("data-i"));
+    if (!data) return;
+    reportTipEl.textContent = "";
+    var head = document.createElement("div");
+    head.className = "t-head";
+    head.textContent = data.labels[i];
+    reportTipEl.appendChild(head);
+    data.series.forEach(function (sr) {
+      var row = document.createElement("div");
+      row.className = "t-row";
+      var key = document.createElement("span");
+      key.className = "t-key";
+      key.style.background = sr.color;
+      var val = document.createElement("span");
+      val.className = "t-val";
+      val.textContent = "$" + formatMoney(sr.values[i] || 0);
+      var name = document.createElement("span");
+      name.className = "t-name";
+      name.textContent = sr.name;
+      row.appendChild(key); row.appendChild(val); row.appendChild(name);
+      reportTipEl.appendChild(row);
+    });
+    reportTipEl.hidden = false;
+    var box = hit.getBoundingClientRect();
+    var x = ev && ev.clientX !== undefined && ev.type !== "focusin" ? ev.clientX : box.left + box.width / 2;
+    var w = reportTipEl.offsetWidth, h = reportTipEl.offsetHeight;
+    var left = Math.min(Math.max(8, x - w / 2), window.innerWidth - w - 8);
+    var top = box.top - h - 8;
+    if (top < 8) top = box.top + 16;
+    reportTipEl.style.left = left + "px";
+    reportTipEl.style.top = top + "px";
+  }
+
+  function renderSyncBar() {
+    syncDotEl.className = "sync-dot" + (drive.status === "connected" || drive.status === "syncing" ? " connected" : drive.status === "error" ? " error" : "");
+    var labels = {
+      disconnected: "Not connected — saving to this PC only",
+      connecting: "Connecting to Google Drive…",
+      connected: "Synced with Google Drive",
+      syncing: "Saving to Google Drive…",
+      error: drive.message || "Google Drive sync error"
+    };
+    syncLabelEl.textContent = labels[drive.status] || "";
+    var isConnected = drive.status === "connected" || drive.status === "syncing";
+    connectBtnEl.hidden = isConnected;
+    connectBtnEl.textContent = drive.status === "error" ? "Retry connecting" : "Connect Google Drive";
+    disconnectBtnEl.hidden = !isConnected;
+    shareRowEl.hidden = !isConnected;
+  }
+
+  function auditActionLabel(entry) {
+    var verb = entry.action === "delete" ? "deleted" : entry.action === "edit" ? "edited" : "added";
+    var noun = entry.ledger === "income" ? "income" : "an expense";
+    return verb + " " + noun;
+  }
+
+  function renderAuditBody() {
+    if (auditLoading) {
+      auditBodyEl.innerHTML = '<div class="empty-note">Loading…</div>';
+      return;
+    }
+    if (drive.status !== "connected" && drive.status !== "syncing") {
+      auditBodyEl.innerHTML = '<div class="empty-note">Connect Google Drive to see who logged what.</div>';
+      return;
+    }
+    if (!auditLog.length) {
+      auditBodyEl.innerHTML = '<div class="empty-note">No activity logged yet.</div>';
+      return;
+    }
+    var html = "";
+    for (var i = 0; i < auditLog.length; i++) {
+      var e = auditLog[i];
+      html += '<div class="audit-row">';
+      html += '<div class="audit-line1">';
+      html += '<span><span class="audit-who">' + escapeHtml(e.user || "Unknown") + '</span> <span class="audit-action ' + (e.action === "delete" ? "delete" : e.action === "edit" ? "edit" : "add") + '">' + auditActionLabel(e) + '</span></span>';
+      html += '<span class="audit-ts">' + escapeHtml(formatTimestamp(e.ts)) + '</span>';
+      html += '</div>';
+      html += '<div class="audit-detail"><span class="amt">$' + formatMoney(e.amount) + '</span> · ' + escapeHtml(e.category) + ' · ' + escapeHtml(e.description) + ' (' + escapeHtml(formatDate(e.date)) + ')';
+      if (e.action === "edit" && e.previous) {
+        html += '<span class="was">was $' + formatMoney(e.previous.amount) + ' · ' + escapeHtml(e.previous.description) + ' (' + escapeHtml(formatDate(e.previous.date)) + ')</span>';
+      }
+      html += '</div>';
+      html += '</div>';
+    }
+    auditBodyEl.innerHTML = html;
+  }
+
+  async function openAudit() {
+    auditOpen = true;
+    auditOverlayEl.hidden = false;
+    if (drive.status === "connected" || drive.status === "syncing") {
+      auditLoading = true;
+      renderAuditBody();
+      try {
+        var data = await readDriveJson(drive.auditFileId);
+        auditLog = (data && data.entries) || [];
+      } catch (e) {
+        auditLog = [];
+      }
+      auditLoading = false;
+    }
+    renderAuditBody();
+  }
+
+  function closeAudit() {
+    auditOpen = false;
+    auditOverlayEl.hidden = true;
+  }
+
+  function render() {
+    var income = ledgerTotal("income");
+    var expenses = ledgerTotal("expenses");
+    var net = income - expenses;
+
+    incomeTotalEl.textContent = "$" + formatMoney(income);
+    expensesTotalEl.textContent = "$" + formatMoney(expenses);
+    netTotalEl.textContent = (net < 0 ? "-$" : "$") + formatMoney(Math.abs(net));
+    netStatEl.classList.toggle("negative", net < 0);
+
+    monthLabelEl.textContent = MONTH_NAMES[selectedMonth] + " " + selectedYear;
+    todayBtnEl.hidden = isCurrentSystemMonth();
+
+    renderSyncBar();
+
+    loadErrorEl.hidden = !state.loadError;
+    loadErrorEl.textContent = state.loadError;
+
+    if (!state.loaded) {
+      ledgerRoot.innerHTML = '<div class="loading-row">Opening the ledger…</div>';
+      return;
+    }
+
+    ledgerRoot.innerHTML = renderListView();
+
+    if (addingCategory) {
+      var form = ledgerRoot.querySelector('form[data-role="add-form"][data-ledger="' + addingCategory.ledger + '"][data-cat="' + cssEscape(addingCategory.cat) + '"]');
+      var descInput = form && form.querySelector('input[name="description"]');
+      if (descInput) descInput.focus();
+    }
+    if (editingEntry) {
+      var eform = ledgerRoot.querySelector('form[data-role="edit-form"][data-id="' + cssEscape(editingEntry.id) + '"]');
+      var edescInput = eform && eform.querySelector('input[name="description"]');
+      if (edescInput) edescInput.focus();
+    }
+  }
+
+  function cssEscape(s) {
+    return window.CSS && CSS.escape ? CSS.escape(s) : s.replace(/["\\]/g, "\\$&");
+  }
+
+  function emptyData() { return { income: {}, expenses: {}, creditCards: {}, budgets: {} }; }
+
+  function normalizeBody(body) {
+    if (!body) return emptyData();
+    if (body.income || body.expenses || body.creditCards || body.budgets) {
+      // creditCards used to be a flat array (Credit Card Payment only) before it became per-category
+      var cc = body.creditCards;
+      if (Array.isArray(cc)) cc = { "Credit Card Payment": cc };
+      return { income: body.income || {}, expenses: body.expenses || {}, creditCards: cc || {}, budgets: body.budgets || {} };
+    }
+    return emptyData();
+  }
+
+  // ---------- Local cache (always mirrors the last known-good state) ----------
+
+  function saveLocalCache(data) {
+    try { localStorage.setItem(LS_DATA_KEY, JSON.stringify(data)); } catch (e) {}
+  }
+
+  function loadLocalCache() {
+    try {
+      var raw = localStorage.getItem(LS_DATA_KEY);
+      return raw ? normalizeBody(JSON.parse(raw)) : emptyData();
+    } catch (e) {
+      return emptyData();
+    }
+  }
+
+  // ---------- Google Drive sync ----------
+
+  function driveAuthHeaders() { return { Authorization: "Bearer " + drive.accessToken }; }
+
+  function ensureTokenClient() {
+    if (drive.tokenClient) return drive.tokenClient;
+    drive.tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: GOOGLE_CLIENT_ID,
+      scope: DRIVE_SCOPE,
+      callback: function () {}
+    });
+    return drive.tokenClient;
+  }
+
+  function requestAccessToken(interactive) {
+    return new Promise(function (resolve, reject) {
+      var client = ensureTokenClient();
+      client.callback = function (resp) {
+        if (resp && resp.error) { reject(resp); return; }
+        drive.accessToken = resp.access_token;
+        resolve(drive.accessToken);
+      };
+      client.error_callback = function (err) { reject(err); };
+      client.requestAccessToken({ prompt: interactive ? "consent" : "" });
+    });
+  }
+
+  async function driveFetch(url, options, retried) {
+    options = options || {};
+    options.headers = Object.assign({}, options.headers, driveAuthHeaders());
+    var res = await fetch(url, options);
+    if (res.status === 401 && !retried) {
+      await requestAccessToken(false);
+      return driveFetch(url, options, true);
+    }
+    return res;
+  }
+
+  async function driveErrorMessage(res, fallback) {
+    try {
+      var body = await res.clone().json();
+      if (body && body.error && body.error.message) return fallback + ": " + body.error.message;
+    } catch (e) {}
+    return fallback + " (" + res.status + ")";
+  }
+
+  // Generic: find a file by name, or create it empty. Returns { id, created }.
+  async function findOrCreateNamedFile(name, knownId) {
+    if (knownId) {
+      var check = await driveFetch("https://www.googleapis.com/drive/v3/files/" + knownId + "?fields=id,trashed");
+      if (check.ok) {
+        var meta = await check.json();
+        if (!meta.trashed) return { id: knownId, created: false };
+      }
+    }
+    var q = encodeURIComponent("name='" + name + "' and trashed=false");
+    var listRes = await driveFetch("https://www.googleapis.com/drive/v3/files?q=" + q + "&spaces=drive&fields=files(id,name)");
+    if (!listRes.ok) throw new Error(await driveErrorMessage(listRes, "Couldn't search Google Drive"));
+    var listJson = await listRes.json();
+    if (listJson.files && listJson.files.length) {
+      return { id: listJson.files[0].id, created: false };
+    }
+    var createRes = await driveFetch("https://www.googleapis.com/drive/v3/files", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: name, mimeType: "application/json" })
+    });
+    if (!createRes.ok) throw new Error(await driveErrorMessage(createRes, "Couldn't create " + name + " in Google Drive"));
+    var createJson = await createRes.json();
+    return { id: createJson.id, created: true };
+  }
+
+  async function readDriveJson(fileId) {
+    var res = await driveFetch("https://www.googleapis.com/drive/v3/files/" + fileId + "?alt=media");
+    if (!res.ok) throw new Error(await driveErrorMessage(res, "Couldn't read from Google Drive"));
+    var text = await res.text();
+    return text ? JSON.parse(text) : null;
+  }
+
+  async function writeDriveJson(fileId, data) {
+    var res = await driveFetch("https://www.googleapis.com/upload/drive/v3/files/" + fileId + "?uploadType=media", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) throw new Error(await driveErrorMessage(res, "Couldn't save to Google Drive"));
+  }
+
+  async function findOrCreateDriveFile() {
+    var result = await findOrCreateNamedFile(DRIVE_FILE_NAME, drive.fileId);
+    drive.fileId = result.id;
+    if (result.created) await writeDriveJson(drive.fileId, emptyData());
+    localStorage.setItem(LS_FILEID_KEY, drive.fileId);
+    return drive.fileId;
+  }
+
+  async function findOrCreateAuditFile() {
+    var result = await findOrCreateNamedFile(DRIVE_AUDIT_FILE_NAME, drive.auditFileId);
+    drive.auditFileId = result.id;
+    if (result.created) await writeDriveJson(drive.auditFileId, { entries: [] });
+    localStorage.setItem(LS_AUDIT_FILEID_KEY, drive.auditFileId);
+    return drive.auditFileId;
+  }
+
+  // ---------- Monthly backups ----------
+  // On (or after) the 1st of each month, snapshot the previous month's
+  // ledger into its own dated Drive file — a separate backup per month,
+  // never overwritten. Checked at most once per calendar day.
+
+  function monthKeyOf(y, m) { return y + "-" + pad2(m + 1); }
+
+  function previousMonthKey(d) {
+    var y = d.getFullYear();
+    var m = d.getMonth() - 1;
+    if (m < 0) { m = 11; y -= 1; }
+    return monthKeyOf(y, m);
+  }
+
+  var lastBackupCheckDate = null;
+
+  async function ensureMonthlyBackup() {
+    var key = previousMonthKey(new Date());
+    var name = "household-ledger-backup-" + key + ".json";
+    try {
+      var result = await findOrCreateNamedFile(name, null);
+      if (result.created) {
+        await writeDriveJson(result.id, { backupFor: key, createdAt: new Date().toISOString(), data: state.data });
+      }
+    } catch (e) {
+      // best-effort — the next daily check will retry
+    }
+  }
+
+  function maybeRunMonthlyBackup() {
+    if (drive.status !== "connected" && drive.status !== "syncing") return;
+    var today = todayISO();
+    if (lastBackupCheckDate === today) return;
+    lastBackupCheckDate = today;
+    ensureMonthlyBackup();
+  }
+
+  async function readDriveFile() {
+    var data = await readDriveJson(drive.fileId);
+    return data || emptyData();
+  }
+
+  async function writeDriveFile(data) {
+    await writeDriveJson(drive.fileId, data);
+  }
+
+  async function fetchDriveUser() {
+    try {
+      var res = await driveFetch("https://www.googleapis.com/drive/v3/about?fields=user");
+      if (!res.ok) return;
+      var json = await res.json();
+      drive.userName = (json.user && (json.user.displayName || json.user.emailAddress)) || "";
+    } catch (e) {}
+  }
+
+  async function recordAudit(action, ledgerKey, cat, entry, previous) {
+    if (!drive.auditFileId || (drive.status !== "connected" && drive.status !== "syncing")) return;
+    try {
+      var current = await readDriveJson(drive.auditFileId);
+      var list = (current && current.entries) || [];
+      var record = {
+        id: makeId(),
+        ts: new Date().toISOString(),
+        user: drive.userName || "Unknown",
+        action: action,
+        ledger: ledgerKey,
+        category: cat,
+        description: entry.description,
+        amount: entry.amount,
+        date: entry.date
+      };
+      if (previous) {
+        record.previous = { description: previous.description, amount: previous.amount, date: previous.date };
+      }
+      list.unshift(record);
+      if (list.length > 500) list = list.slice(0, 500);
+      await writeDriveJson(drive.auditFileId, { entries: list });
+      auditLog = list;
+    } catch (e) {
+      // best-effort — never block a ledger edit on the audit log
+    }
+  }
+
+  function stopPolling() {
+    if (drive.pollTimer) { clearInterval(drive.pollTimer); drive.pollTimer = null; }
+  }
+
+  function startPolling() {
+    stopPolling();
+    drive.pollTimer = setInterval(refreshFromDrive, 60000);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+  }
+
+  function onVisibilityChange() {
+    if (document.visibilityState === "visible") refreshFromDrive();
+  }
+
+  async function refreshFromDrive() {
+    if (drive.status !== "connected" || drive.pendingWrite) return;
+    try {
+      var data = await readDriveFile();
+      state.data = normalizeBody(data);
+      saveLocalCache(state.data);
+      render();
+      maybeRunMonthlyBackup();
+    } catch (e) {
+      // keep showing the last known-good state; next poll tries again
+    }
+  }
+
+  async function connectDrive(interactive) {
+    if (GOOGLE_CLIENT_ID.indexOf("REPLACE_WITH") === 0) {
+      drive.status = "error";
+      drive.message = "Add your Google OAuth Client ID at the top of this file's script first.";
+      renderSyncBar();
+      return;
+    }
+    drive.status = "connecting";
+    renderSyncBar();
+    try {
+      await requestAccessToken(interactive);
+      await findOrCreateDriveFile();
+      await findOrCreateAuditFile();
+      await fetchDriveUser();
+      var data = await readDriveFile();
+      state.data = normalizeBody(data);
+      state.loaded = true;
+      saveLocalCache(state.data);
+      drive.status = "connected";
+      localStorage.setItem(LS_MODE_KEY, "drive");
+      render();
+      materializeRecurring();
+      startPolling();
+      maybeRunMonthlyBackup();
+    } catch (e) {
+      drive.status = "error";
+      drive.message = (e && e.message) || "Couldn't connect to Google Drive.";
+      render();
+    }
+  }
+
+  async function shareOneFile(fileId, email, notify) {
+    var res = await driveFetch(
+      "https://www.googleapis.com/drive/v3/files/" + fileId + "/permissions?sendNotificationEmail=" + (notify ? "true" : "false"),
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role: "writer", type: "user", emailAddress: email })
+      }
+    );
+    if (!res.ok) {
+      var errJson = await res.json().catch(function () { return null; });
+      throw new Error((errJson && errJson.error && errJson.error.message) || ("Share failed (" + res.status + ")"));
+    }
+  }
+
+  async function shareFile() {
+    var email = shareEmailEl.value.trim();
+    if (!email) return;
+    if (!drive.fileId) { shareMsgEl.textContent = "Connect first."; return; }
+    shareMsgEl.textContent = "Sharing…";
+    try {
+      await shareOneFile(drive.fileId, email, true);
+      if (drive.auditFileId) await shareOneFile(drive.auditFileId, email, false);
+      shareMsgEl.textContent = "Shared with " + email + " — they can now connect to the same file.";
+      shareEmailEl.value = "";
+    } catch (e) {
+      shareMsgEl.textContent = (e && e.message) || "Couldn't share the file.";
+    }
+  }
+
+  function disconnectDrive() {
+    stopPolling();
+    drive.status = "disconnected";
+    drive.accessToken = null;
+    localStorage.setItem(LS_MODE_KEY, "local");
+    render();
+  }
+
+  // ---------- Persist (routes to Drive when connected, else local only) ----------
+
+  async function persist(nextData) {
+    state.data = nextData;
+    saveLocalCache(nextData);
+    render();
+    if (drive.status === "connected" || drive.status === "syncing") {
+      drive.pendingWrite = true;
+      drive.status = "syncing";
+      renderSyncBar();
+      try {
+        await writeDriveFile(nextData);
+        drive.status = "connected";
+      } catch (e) {
+        drive.status = "error";
+        drive.message = (e && e.message) || "Couldn't save to Google Drive — your change is kept on this PC.";
+      }
+      drive.pendingWrite = false;
+      renderSyncBar();
+    }
+  }
+
+  function goToMonthOf(iso) {
+    var p = parseISO(iso);
+    selectedYear = p.y;
+    selectedMonth = p.m;
+  }
+
+  function addEntry(ledgerKey, cat, entry) {
+    var list = ledgerData(ledgerKey)[cat] || [];
+    var stored = { id: makeId(), date: entry.date, description: entry.description, amount: entry.amount };
+    if (entry.recurring) {
+      stored.recurDay = parseISO(entry.date).d;
+      stored.seriesId = makeId();
+    }
+    var nextLedger = Object.assign({}, ledgerData(ledgerKey));
+    nextLedger[cat] = list.concat([stored]);
+    var next = Object.assign({}, state.data);
+    next[ledgerKey] = nextLedger;
+    if (!inSelectedMonth(entry.date)) goToMonthOf(entry.date);
+    persist(next);
+    recordAudit("add", ledgerKey, cat, entry);
+  }
+
+  function editEntry(ledgerKey, cat, id, patch) {
+    var list = ledgerData(ledgerKey)[cat] || [];
+    var index = -1;
+    for (var i = 0; i < list.length; i++) { if (list[i].id === id) { index = i; break; } }
+    if (index === -1) return;
+    var before = list[index];
+    var after = Object.assign({}, before, patch);
+    var nextList = list.slice();
+    nextList[index] = after;
+    var nextLedger = Object.assign({}, ledgerData(ledgerKey));
+    nextLedger[cat] = nextList;
+    var next = Object.assign({}, state.data);
+    next[ledgerKey] = nextLedger;
+    if (!inSelectedMonth(after.date)) goToMonthOf(after.date);
+    persist(next);
+    recordAudit("edit", ledgerKey, cat, after, before);
+  }
+
+  function deleteEntry(ledgerKey, cat, id) {
+    var list = ledgerData(ledgerKey)[cat] || [];
+    var removed = list.find(function (p) { return p.id === id; });
+    var nextLedger = Object.assign({}, ledgerData(ledgerKey));
+    nextLedger[cat] = list.filter(function (p) { return p.id !== id; });
+    var next = Object.assign({}, state.data);
+    next[ledgerKey] = nextLedger;
+    persist(next);
+    if (removed) recordAudit("delete", ledgerKey, cat, removed);
+  }
+
+  function setBudget(cat, amount) {
+    var nextBudgets = Object.assign({}, state.data.budgets);
+    if (amount > 0) nextBudgets[cat] = amount; else delete nextBudgets[cat];
+    var next = Object.assign({}, state.data);
+    next.budgets = nextBudgets;
+    persist(next);
+  }
+
+  function creditCardsFor(cat) {
+    return (state.data.creditCards && state.data.creditCards[cat]) || [];
+  }
+
+  function addCreditCard(cat, card) {
+    var next = Object.assign({}, state.data);
+    var nextCC = Object.assign({}, state.data.creditCards);
+    nextCC[cat] = creditCardsFor(cat).concat([{
+      id: makeId(), name: card.name, balance: card.balance, minPayment: card.minPayment, autopay: !!card.autopay
+    }]);
+    next.creditCards = nextCC;
+    persist(next);
+  }
+
+  function editCreditCard(cat, id, patch) {
+    var next = Object.assign({}, state.data);
+    var nextCC = Object.assign({}, state.data.creditCards);
+    nextCC[cat] = creditCardsFor(cat).map(function (c) {
+      return c.id === id ? Object.assign({}, c, patch) : c;
+    });
+    next.creditCards = nextCC;
+    persist(next);
+  }
+
+  function deleteCreditCard(cat, id) {
+    var next = Object.assign({}, state.data);
+    var nextCC = Object.assign({}, state.data.creditCards);
+    nextCC[cat] = creditCardsFor(cat).filter(function (c) { return c.id !== id; });
+    next.creditCards = nextCC;
+    persist(next);
+  }
+
+  function stopRecurring(ledgerKey, cat, seriesId) {
+    var list = ledgerData(ledgerKey)[cat] || [];
+    var nextList = list.map(function (p) {
+      if (p.seriesId !== seriesId) return p;
+      var copy = Object.assign({}, p);
+      delete copy.recurDay;
+      delete copy.seriesId;
+      return copy;
+    });
+    var nextLedger = Object.assign({}, ledgerData(ledgerKey));
+    nextLedger[cat] = nextList;
+    var next = Object.assign({}, state.data);
+    next[ledgerKey] = nextLedger;
+    persist(next);
+  }
+
+  // Lazily materializes this month's occurrence of any recurring series
+  // that doesn't already have one — only for months actually visited.
+  function materializeRecurring() {
+    if (!state.loaded) return;
+    var next = null;
+    function draft() {
+      if (!next) next = { income: Object.assign({}, state.data.income), expenses: Object.assign({}, state.data.expenses), creditCards: state.data.creditCards || {}, budgets: state.data.budgets || {} };
+      return next;
+    }
+    LEDGERS.forEach(function (ledger) {
+      var data = state.data[ledger.key] || {};
+      for (var cat in data) {
+        var list = data[cat] || [];
+        var templates = {};
+        var firstDate = {};
+        list.forEach(function (p) {
+          if (!p.recurDay || !p.seriesId) return;
+          if (!templates[p.seriesId] || p.date > templates[p.seriesId].date) templates[p.seriesId] = p;
+          if (!firstDate[p.seriesId] || p.date < firstDate[p.seriesId]) firstDate[p.seriesId] = p.date;
+        });
+        Object.keys(templates).forEach(function (sid) {
+          var startP = parseISO(firstDate[sid]);
+          if (selectedYear < startP.y || (selectedYear === startP.y && selectedMonth < startP.m)) return;
+          var alreadyInMonth = list.some(function (p) { return p.seriesId === sid && inSelectedMonth(p.date); });
+          if (alreadyInMonth) return;
+          var tmpl = templates[sid];
+          var day = Math.min(tmpl.recurDay, daysInSelectedMonth());
+          var newDate = selectedYear + "-" + pad2(selectedMonth + 1) + "-" + pad2(day);
+          var newEntry = { id: makeId(), date: newDate, description: tmpl.description, amount: tmpl.amount, recurDay: tmpl.recurDay, seriesId: sid };
+          var d = draft();
+          d[ledger.key] = Object.assign({}, d[ledger.key]);
+          d[ledger.key][cat] = (d[ledger.key][cat] || []).concat([newEntry]);
+        });
+      }
+    });
+    if (next) persist(next);
+  }
+
+  document.querySelector(".month-bar").addEventListener("click", function (e) {
+    var el = e.target.closest("[data-action]");
+    if (!el) return;
+    var action = el.getAttribute("data-action");
+    if (action === "prev-month") {
+      selectedMonth -= 1;
+      if (selectedMonth < 0) { selectedMonth = 11; selectedYear -= 1; }
+      render();
+      materializeRecurring();
+    } else if (action === "next-month") {
+      selectedMonth += 1;
+      if (selectedMonth > 11) { selectedMonth = 0; selectedYear += 1; }
+      render();
+      materializeRecurring();
+    } else if (action === "jump-today") {
+      selectedYear = now.getFullYear();
+      selectedMonth = now.getMonth();
+      render();
+      materializeRecurring();
+    } else if (action === "toggle-export-menu") {
+      var willOpen = exportDropdownEl.hidden;
+      exportDropdownEl.hidden = !willOpen;
+      el.setAttribute("aria-expanded", String(willOpen));
+    } else if (action === "export-csv") {
+      exportCsv();
+      closeExportMenu();
+    } else if (action === "export-all") {
+      exportAllCsv();
+      closeExportMenu();
+    } else if (action === "export-audit") {
+      exportAuditLog();
+      closeExportMenu();
+    }
+  });
+
+  function closeExportMenu() {
+    exportDropdownEl.hidden = true;
+    document.querySelector('[data-action="toggle-export-menu"]').setAttribute("aria-expanded", "false");
+  }
+  document.addEventListener("click", function (e) {
+    if (!exportDropdownEl.hidden && !e.target.closest(".export-menu")) closeExportMenu();
+  });
+
+  document.querySelector(".sync-bar").addEventListener("click", function (e) {
+    var el = e.target.closest("[data-action]");
+    if (!el) return;
+    var action = el.getAttribute("data-action");
+    if (action === "connect-drive") connectDrive(true);
+    else if (action === "disconnect-drive") disconnectDrive();
+  });
+
+  shareRowEl.addEventListener("click", function (e) {
+    var el = e.target.closest("[data-action]");
+    if (el && el.getAttribute("data-action") === "share-file") shareFile();
+  });
+  shareEmailEl.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") { e.preventDefault(); shareFile(); }
+  });
+
+  ledgerRoot.addEventListener("click", function (e) {
+    var el = e.target.closest("[data-action]");
+    if (!el) return;
+    var action = el.getAttribute("data-action");
+    var ledgerKey = el.getAttribute("data-ledger");
+    var cat = el.getAttribute("data-cat");
+
+    if (action === "toggle-category") {
+      var isSame = openCategory && openCategory.ledger === ledgerKey && openCategory.cat === cat;
+      openCategory = isSame ? null : { ledger: ledgerKey, cat: cat };
+      addingCategory = null;
+      editingEntry = null;
+      addingCard = false;
+      editingCardId = null;
+      editingBudgetCat = null;
+      render();
+    } else if (action === "edit-budget") {
+      editingBudgetCat = cat;
+      render();
+      var bInput = ledgerRoot.querySelector('form[data-role="budget-form"] input[name="budget"]');
+      if (bInput) bInput.focus();
+    } else if (action === "cancel-budget") {
+      editingBudgetCat = null;
+      render();
+    } else if (action === "clear-budget") {
+      editingBudgetCat = null;
+      setBudget(cat, null);
+    } else if (action === "show-add") {
+      addingCategory = { ledger: ledgerKey, cat: cat };
+      editingEntry = null;
+      render();
+    } else if (action === "cancel-add") {
+      addingCategory = null;
+      render();
+    } else if (action === "edit-entry") {
+      editingEntry = { ledger: ledgerKey, cat: cat, id: el.getAttribute("data-id") };
+      addingCategory = null;
+      render();
+    } else if (action === "cancel-edit") {
+      editingEntry = null;
+      render();
+    } else if (action === "delete-entry") {
+      var deletedId = el.getAttribute("data-id");
+      if (editingEntry && editingEntry.id === deletedId) editingEntry = null;
+      deleteEntry(ledgerKey, cat, deletedId);
+    } else if (action === "stop-recur") {
+      stopRecurring(ledgerKey, cat, el.getAttribute("data-series"));
+    } else if (action === "show-add-card") {
+      addingCard = true;
+      editingCardId = null;
+      render();
+    } else if (action === "cancel-add-card") {
+      addingCard = false;
+      render();
+    } else if (action === "edit-card") {
+      editingCardId = el.getAttribute("data-id");
+      addingCard = false;
+      render();
+    } else if (action === "cancel-edit-card") {
+      editingCardId = null;
+      render();
+    } else if (action === "delete-card") {
+      var deletedCardId = el.getAttribute("data-id");
+      if (editingCardId === deletedCardId) editingCardId = null;
+      deleteCreditCard(openCategory.cat, deletedCardId);
+    }
+  });
+
+  ledgerRoot.addEventListener("submit", function (e) {
+    var addForm = e.target.closest('form[data-role="add-form"]');
+    var editForm = e.target.closest('form[data-role="edit-form"]');
+    var addCardForm = e.target.closest('form[data-role="add-card-form"]');
+    var editCardForm = e.target.closest('form[data-role="edit-card-form"]');
+    var budgetForm = e.target.closest('form[data-role="budget-form"]');
+    if (!addForm && !editForm && !addCardForm && !editCardForm && !budgetForm) return;
+    e.preventDefault();
+
+    if (budgetForm) {
+      var budgetAmount = parseFloat(budgetForm.elements["budget"].value);
+      if (isNaN(budgetAmount) || budgetAmount <= 0) return;
+      editingBudgetCat = null;
+      setBudget(budgetForm.getAttribute("data-cat"), budgetAmount);
+      return;
+    }
+
+    if (addCardForm || editCardForm) {
+      var cardForm = addCardForm || editCardForm;
+      var cardName = cardForm.elements["name"].value.trim();
+      var cardBalance = parseFloat(cardForm.elements["balance"].value);
+      var cardMinPayment = parseFloat(cardForm.elements["minPayment"].value);
+      var cardAutopay = !!cardForm.elements["autopay"].checked;
+      if (!cardName || isNaN(cardBalance) || cardBalance < 0 || isNaN(cardMinPayment) || cardMinPayment < 0) return;
+      if (editCardForm) {
+        var cardId = editCardForm.getAttribute("data-id");
+        editingCardId = null;
+        editCreditCard(openCategory.cat, cardId, { name: cardName, balance: cardBalance, minPayment: cardMinPayment, autopay: cardAutopay });
+      } else {
+        addingCard = false;
+        addCreditCard(openCategory.cat, { name: cardName, balance: cardBalance, minPayment: cardMinPayment, autopay: cardAutopay });
+      }
+      return;
+    }
+
+    if (editForm) {
+      var editLedgerKey = editForm.getAttribute("data-ledger");
+      var editCat = editForm.getAttribute("data-cat");
+      var editId = editForm.getAttribute("data-id");
+      var editDate = editForm.elements["date"].value;
+      var editDescription = editForm.elements["description"].value.trim();
+      var editAmount = parseFloat(editForm.elements["amount"].value);
+      if (!editDescription || !editAmount || editAmount <= 0) return;
+      editingEntry = null;
+      editEntry(editLedgerKey, editCat, editId, { date: editDate, description: editDescription, amount: editAmount });
+      return;
+    }
+
+    var ledgerKey = addForm.getAttribute("data-ledger");
+    var cat = addForm.getAttribute("data-cat");
+    var date = addForm.elements["date"].value;
+    var description = addForm.elements["description"].value.trim();
+    var amount = parseFloat(addForm.elements["amount"].value);
+    if (!description || !amount || amount <= 0) return;
+    var recurringEl = addForm.elements["recurring"];
+    var recurring = !!(recurringEl && recurringEl.checked);
+    addingCategory = null;
+    addEntry(ledgerKey, cat, { date: date, description: description, amount: amount, recurring: recurring });
+  });
+
+  document.querySelector('[data-action="open-audit"]').addEventListener("click", openAudit);
+  document.querySelector('[data-action="open-report"]').addEventListener("click", openReport);
+  reportOverlayEl.addEventListener("click", function (e) {
+    if (e.target === reportOverlayEl || e.target.closest('[data-action="close-report"]')) { closeReport(); return; }
+    var el = e.target.closest("[data-action]");
+    if (!el) return;
+    var action = el.getAttribute("data-action");
+    if (action === "report-tab") reportTab = el.getAttribute("data-tab");
+    else if (action === "report-months") reportMonths = Number(el.getAttribute("data-n")) === 6 ? 6 : 12;
+    else if (action === "report-table") reportTable = !reportTable;
+    else return;
+    reportTipEl.hidden = true;
+    renderReport();
+  });
+  reportOverlayEl.addEventListener("change", function (e) {
+    if (e.target.getAttribute("data-action") !== "report-cat") return;
+    reportCat = e.target.value;
+    renderReport();
+  });
+  reportOverlayEl.addEventListener("pointermove", function (e) {
+    var hit = e.target.closest && e.target.closest(".hit");
+    if (hit) showReportTip(hit, e); else reportTipEl.hidden = true;
+  });
+  reportOverlayEl.addEventListener("pointerleave", function () { reportTipEl.hidden = true; });
+  reportOverlayEl.addEventListener("focusin", function (e) {
+    if (e.target.classList && e.target.classList.contains("hit")) showReportTip(e.target, e);
+  });
+  reportOverlayEl.addEventListener("focusout", function () { reportTipEl.hidden = true; });
+  window.addEventListener("resize", function () { if (reportOpen && reportTab === "trends" && !reportTable) renderReport(); });
+  auditOverlayEl.addEventListener("click", function (e) {
+    if (e.target === auditOverlayEl || e.target.closest('[data-action="close-audit"]')) closeAudit();
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && auditOpen) closeAudit();
+    if (e.key === "Escape" && reportOpen) closeReport();
+  });
+
+  function init() {
+    state.data = loadLocalCache();
+    state.loaded = true;
+    render();
+    materializeRecurring();
+
+    var wantsDrive = localStorage.getItem(LS_MODE_KEY) === "drive" && drive.fileId;
+    if (wantsDrive) {
+      // try a silent reconnect once Google's script has loaded
+      var tries = 0;
+      var wait = setInterval(function () {
+        tries += 1;
+        if (window.google && google.accounts && google.accounts.oauth2) {
+          clearInterval(wait);
+          connectDrive(false).catch(function () {});
+        } else if (tries > 40) {
+          clearInterval(wait);
+        }
+      }, 100);
+    }
+  }
+
+  init();
+
+  if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+    navigator.serviceWorker.register("sw.js").catch(function () {});
+  }
+})();
+</script>
+</body>
+</html>
