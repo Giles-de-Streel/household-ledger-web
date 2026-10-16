@@ -8,7 +8,7 @@
 <meta name="theme-color" content="#17332B">
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,900&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
   :root {
     --paper: #F1EEE1;
@@ -141,14 +141,34 @@
     padding: 16px 20px 12px;
   }
 
+  /* Title: heavy display serif with a cream-to-gold face and a stacked copper "extrusion"
+     (successive 1px drop-shadows) plus a soft cast shadow, so it reads as raised 3D lettering. */
   .masthead h1 {
     margin: 0;
     font-family: 'Fraunces', Georgia, serif;
-    font-weight: 600;
-    font-size: 1.3rem;
-    letter-spacing: 0.01em;
+    font-weight: 900;
+    font-optical-sizing: auto;
+    font-size: 1.85rem;
+    line-height: 1.1;
+    letter-spacing: 0.015em;
     text-wrap: balance;
+    text-shadow: none;
+    color: #FFF3D6;
+    background: linear-gradient(180deg, #FFFDF6 0%, #FFE9B8 45%, #F5C77A 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    filter:
+      drop-shadow(1px 1px 0 #C9853F)
+      drop-shadow(1px 1px 0 #A9662C)
+      drop-shadow(1px 1px 0 #8A4E20)
+      drop-shadow(1px 1px 0 #6B3A17)
+      drop-shadow(2px 4px 5px rgba(0, 0, 0, 0.55));
   }
+  @media (max-width: 480px) {
+    .masthead h1 { font-size: 1.45rem; }
+  }
+  .masthead > svg { width: 24px; height: 24px; filter: drop-shadow(1px 2px 2px rgba(0, 0, 0, 0.5)); }
 
   .month-bar {
     color: var(--paper);
