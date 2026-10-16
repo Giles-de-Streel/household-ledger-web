@@ -625,6 +625,8 @@
     white-space: nowrap;
   }
   .recur-check input { width: auto; }
+  .recur-select { width: auto; font-size: 0.8rem; }
+  .recur-yr { font-size: 0.6rem; font-weight: 600; margin-left: 1px; vertical-align: 1px; }
 
   .cc-panel { padding: 10px 14px 10px 34px; border-bottom: 1px solid var(--rule); }
   .cc-summary { display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 8px; }
@@ -1096,6 +1098,8 @@
   ];
 
   var RECUR_CATEGORIES = { "Salary / Wages": true, "Subscriptions": true, "Internet / Phone": true };
+  // Categories whose add form also offers "Repeats yearly" (stored as recurMonth on the series).
+  var YEARLY_RECUR_CATEGORIES = { "Subscriptions": true };
   var DEBT_GROUP_NAME = "Debt";
 
   var MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -1194,6 +1198,13 @@
     var p = parseISO(iso);
     return pad2(p.m + 1) + "/" + pad2(p.d) + "/" + String(p.y).slice(2);
   }
+  function isYearly(p) { return p.recurMonth !== undefined && p.recurMonth !== null; }
+  function recurDescription(p) {
+    return isYearly(p)
+      ? "Repeats yearly on " + MONTH_NAMES[p.recurMonth] + " " + p.recurDay
+      : "Repeats monthly on day " + p.recurDay;
+  }
+
   function makeId() {
     if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
     return "p" + Date.now() + Math.random().toString(16).slice(2);
@@ -1250,14 +1261,14 @@
   function renderPurchaseRow(ledger, cat, p, opts) {
     opts = opts || {};
     var showCat = !!opts.showCat;
-    var recurBadge = p.seriesId ? ' <span class="recur-badge" title="Repeats monthly on day ' + p.recurDay + '">' + ICONS.repeat + '</span>' : '';
+    var recurBadge = p.seriesId ? ' <span class="recur-badge" title="' + escapeHtml(recurDescription(p)) + '">' + ICONS.repeat + (isYearly(p) ? '<span class="recur-yr">1y</span>' : '') + '</span>' : '';
     return (
       '<div class="purchase-row' + (opts.flush ? ' flush' : '') + '" data-tone="' + ledger.tone + '">' +
         (showCat ? '' : '<span class="date">' + escapeHtml(formatDate(p.date)) + '</span>') +
         (showCat ? '<span class="cat-tag">' + escapeHtml(cat) + '</span>' : '') +
         '<span class="desc">' + escapeHtml(p.description) + recurBadge + '</span>' +
         '<span class="amt">$' + formatMoney(p.amount) + '</span>' +
-        (p.seriesId ? '<button type="button" class="stop-recur" data-action="stop-recur" data-ledger="' + ledger.key + '" data-cat="' + escapeHtml(cat) + '" data-series="' + escapeHtml(p.seriesId) + '" title="Stop repeating monthly">' + ICONS.repeatOff + '</button>' : '') +
+        (p.seriesId ? '<button type="button" class="stop-recur" data-action="stop-recur" data-ledger="' + ledger.key + '" data-cat="' + escapeHtml(cat) + '" data-series="' + escapeHtml(p.seriesId) + '" title="Stop repeating ' + (isYearly(p) ? 'yearly' : 'monthly') + '">' + ICONS.repeatOff + '</button>' : '') +
         '<button type="button" class="edit-btn" data-action="edit-entry" data-ledger="' + ledger.key + '" data-cat="' + escapeHtml(cat) + '" data-id="' + escapeHtml(p.id) + '" aria-label="Edit entry">' + ICONS.pencil + '</button>' +
         '<button type="button" class="del" data-action="delete-entry" data-ledger="' + ledger.key + '" data-cat="' + escapeHtml(cat) + '" data-id="' + escapeHtml(p.id) + '" aria-label="' + escapeHtml(ledger.deleteLabel) + '">' + ICONS.trash + '</button>' +
       '</div>'
@@ -1277,9 +1288,13 @@
   }
 
   function renderAddForm(ledger, cat) {
-    var recurField = RECUR_CATEGORIES[cat]
-      ? '<label class="recur-check"><input type="checkbox" name="recurring"> Repeats monthly</label>'
-      : '';
+    var recurField = "";
+    if (YEARLY_RECUR_CATEGORIES[cat]) {
+      recurField = '<select class="recur-select" name="repeat" aria-label="Repeats">' +
+        '<option value="">Doesn&rsquo;t repeat</option><option value="monthly">Repeats monthly</option><option value="yearly">Repeats yearly</option></select>';
+    } else if (RECUR_CATEGORIES[cat]) {
+      recurField = '<label class="recur-check"><input type="checkbox" name="recurring"> Repeats monthly</label>';
+    }
     return (
       '<form class="add-form" data-ledger="' + ledger.key + '" data-cat="' + escapeHtml(cat) + '" data-role="add-form">' +
         '<input type="date" name="date" value="' + defaultEntryDate() + '" required>' +
@@ -1483,7 +1498,7 @@
             category: cat,
             description: p.description,
             amount: Number(p.amount) || 0,
-            recurring: p.seriesId ? "Yes" : "No"
+            recurring: p.seriesId ? (isYearly(p) ? "Yearly" : "Monthly") : "No"
           });
         });
       }
@@ -1816,6 +1831,7 @@
     var recInc = 0, recExp = 0, recItems = [];
     recurringSeriesList().forEach(function (r) {
       if (r.first.slice(0, 7) > nk) return;
+      if (isYearly(r.tmpl) && r.tmpl.recurMonth !== nm) return;
       var already = (ledgerData(r.ledger.key)[r.cat] || []).some(function (p) { return p.seriesId === r.sid && String(p.date).slice(0, 7) === nk; });
       if (already) return;
       var amt = Number(r.tmpl.amount) || 0;
@@ -2607,9 +2623,10 @@
   function addEntry(ledgerKey, cat, entry) {
     var list = ledgerData(ledgerKey)[cat] || [];
     var stored = { id: makeId(), date: entry.date, description: entry.description, amount: entry.amount };
-    if (entry.recurring) {
+    if (entry.repeat) {
       stored.recurDay = parseISO(entry.date).d;
       stored.seriesId = makeId();
+      if (entry.repeat === "yearly") stored.recurMonth = parseISO(entry.date).m;
     }
     var nextLedger = Object.assign({}, ledgerData(ledgerKey));
     nextLedger[cat] = list.concat([stored]);
@@ -2695,6 +2712,7 @@
       if (p.seriesId !== seriesId) return p;
       var copy = Object.assign({}, p);
       delete copy.recurDay;
+      delete copy.recurMonth;
       delete copy.seriesId;
       return copy;
     });
@@ -2728,12 +2746,14 @@
         Object.keys(templates).forEach(function (sid) {
           var startP = parseISO(firstDate[sid]);
           if (selectedYear < startP.y || (selectedYear === startP.y && selectedMonth < startP.m)) return;
+          var tmpl = templates[sid];
+          if (isYearly(tmpl) && tmpl.recurMonth !== selectedMonth) return;
           var alreadyInMonth = list.some(function (p) { return p.seriesId === sid && inSelectedMonth(p.date); });
           if (alreadyInMonth) return;
-          var tmpl = templates[sid];
           var day = Math.min(tmpl.recurDay, daysInSelectedMonth());
           var newDate = selectedYear + "-" + pad2(selectedMonth + 1) + "-" + pad2(day);
           var newEntry = { id: makeId(), date: newDate, description: tmpl.description, amount: tmpl.amount, recurDay: tmpl.recurDay, seriesId: sid };
+          if (isYearly(tmpl)) newEntry.recurMonth = tmpl.recurMonth;
           var d = draft();
           d[ledger.key] = Object.assign({}, d[ledger.key]);
           d[ledger.key][cat] = (d[ledger.key][cat] || []).concat([newEntry]);
@@ -2927,9 +2947,10 @@
     var amount = parseFloat(addForm.elements["amount"].value);
     if (!description || !amount || amount <= 0) return;
     var recurringEl = addForm.elements["recurring"];
-    var recurring = !!(recurringEl && recurringEl.checked);
+    var repeatEl = addForm.elements["repeat"];
+    var repeat = repeatEl ? repeatEl.value : (recurringEl && recurringEl.checked ? "monthly" : "");
     u.addingCategory = null;
-    addEntry(ledgerKey, cat, { date: date, description: description, amount: amount, recurring: recurring });
+    addEntry(ledgerKey, cat, { date: date, description: description, amount: amount, repeat: repeat });
   }
 
   ledgerRoot.addEventListener("click", function (e) { handleLedgerClick(e, ledgerRoot, mainUi); });
