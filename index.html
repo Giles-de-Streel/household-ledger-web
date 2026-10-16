@@ -262,6 +262,7 @@
     border-bottom: 1px solid var(--rule);
     font-size: 0.78rem;
   }
+  #sync-label.unsynced { color: var(--debit); font-weight: 600; }
   .sync-status {
     display: flex;
     align-items: center;
@@ -1140,6 +1141,7 @@
   var LS_MODE_KEY = "household-ledger-storage-mode";
   var LS_FILEID_KEY = "household-ledger-drive-file-id";
   var LS_AUDIT_FILEID_KEY = "household-ledger-drive-audit-file-id";
+  var LS_PENDING_KEY = "household-ledger-pending-changes";
 
   var now = new Date();
 
@@ -1173,6 +1175,7 @@
     auditFileId: localStorage.getItem(LS_AUDIT_FILEID_KEY) || null,
     userName: "",
     pendingWrite: false,
+    notice: "",
     pollTimer: null
   };
 
@@ -2085,11 +2088,19 @@
     var labels = {
       disconnected: "Not connected — saving to this PC only",
       connecting: "Connecting to Google Drive…",
-      connected: "Synced with Google Drive",
+      connected: drive.notice || "Synced with Google Drive",
       syncing: "Saving to Google Drive…",
       error: drive.message || "Google Drive sync error"
     };
-    syncLabelEl.textContent = labels[drive.status] || "";
+    var unsynced = pendingCount();
+    var offline = drive.status !== "connected" && drive.status !== "syncing";
+    var label = labels[drive.status] || "";
+    if (unsynced && offline) {
+      label = "Not synced \u2014 " + unsynced + " change" + (unsynced === 1 ? "" : "s") + " saved only on this device; connect to upload " +
+        (unsynced === 1 ? "it" : "them") + " (" + label + ")";
+    }
+    syncLabelEl.textContent = label;
+    syncLabelEl.classList.toggle("unsynced", !!unsynced && offline);
     var isConnected = drive.status === "connected" || drive.status === "syncing";
     connectBtnEl.hidden = isConnected;
     connectBtnEl.textContent = drive.status === "error" ? "Retry connecting" : "Connect Google Drive";
@@ -2374,6 +2385,87 @@
 
   // ---------- Local cache (always mirrors the last known-good state) ----------
 
+  // ---------- Changes not yet confirmed in Drive ----------
+  // Every entry add/edit/delete is noted here until a Drive write containing it succeeds, so that
+  // connecting (or reconnecting) merges this device's offline changes instead of overwriting them.
+
+  function loadPending() {
+    try {
+      var p = JSON.parse(localStorage.getItem(LS_PENDING_KEY) || "null");
+      if (p && p.upserts && p.deletes) return p;
+    } catch (e) {}
+    return { upserts: {}, deletes: {} };
+  }
+  function savePending(p) {
+    try { localStorage.setItem(LS_PENDING_KEY, JSON.stringify(p)); } catch (e) {}
+  }
+  function notePending(kind, id) {
+    var p = loadPending();
+    if (kind === "delete") { p.deletes[id] = true; delete p.upserts[id]; }
+    else { p.upserts[id] = true; delete p.deletes[id]; }
+    savePending(p);
+  }
+  function pendingCount() {
+    var p = loadPending();
+    return Object.keys(p.upserts).length + Object.keys(p.deletes).length;
+  }
+  // Drop only what was pending when the write started; later changes stay pending.
+  function clearPending(snapshot) {
+    var p = loadPending();
+    Object.keys(snapshot.upserts).forEach(function (id) { delete p.upserts[id]; });
+    Object.keys(snapshot.deletes).forEach(function (id) { delete p.deletes[id]; });
+    savePending(p);
+  }
+
+  function auditKey(ledgerKey, cat, e) {
+    return [ledgerKey, cat, e.date, e.description, Number(e.amount) || 0].join("|");
+  }
+
+  // Merge this device's data into the Drive copy. Drive wins, except:
+  //  - entries this device added/edited while unsynced (pending upserts) are kept, local version wins;
+  //  - entries this device deleted while unsynced are removed;
+  //  - entries only on this device that nobody deleted (per the audit log) are kept, which also rescues
+  //    changes made before pending tracking existed;
+  //  - a recurring occurrence is skipped if Drive already has that series in the same month.
+  // Budgets and credit cards always come from Drive.
+  function mergeOfflineChanges(local, remote, pending, auditDeleted) {
+    var merged = normalizeBody(JSON.parse(JSON.stringify(remote)));
+    var rescued = [];
+    var changed = false;
+    LEDGERS.forEach(function (ledger) {
+      var key = ledger.key;
+      var localL = local[key] || {}, remoteL = merged[key] || {};
+      var cats = {};
+      Object.keys(localL).forEach(function (c) { cats[c] = true; });
+      Object.keys(remoteL).forEach(function (c) { cats[c] = true; });
+      Object.keys(cats).forEach(function (cat) {
+        var list = (remoteL[cat] || []).filter(function (e) {
+          if (pending.deletes[e.id]) { changed = true; return false; }
+          return true;
+        });
+        var byId = {};
+        list.forEach(function (e, i) { byId[e.id] = i; });
+        (localL[cat] || []).forEach(function (e) {
+          if (byId[e.id] !== undefined) {
+            if (pending.upserts[e.id] && JSON.stringify(list[byId[e.id]]) !== JSON.stringify(e)) {
+              list[byId[e.id]] = e;
+              changed = true;
+            }
+            return;
+          }
+          if (!pending.upserts[e.id] && auditDeleted[auditKey(key, cat, e)]) return;
+          if (e.seriesId && list.some(function (r) { return r.seriesId === e.seriesId && String(r.date).slice(0, 7) === String(e.date).slice(0, 7); })) return;
+          list.push(e);
+          rescued.push({ ledger: key, cat: cat, entry: e });
+          changed = true;
+        });
+        if (list.length) remoteL[cat] = list; else delete remoteL[cat];
+      });
+      merged[key] = remoteL;
+    });
+    return { data: merged, rescued: rescued, changed: changed };
+  }
+
   function saveLocalCache(data) {
     try { localStorage.setItem(LS_DATA_KEY, JSON.stringify(data)); } catch (e) {}
   }
@@ -2615,13 +2707,30 @@
       await findOrCreateDriveFile();
       await findOrCreateAuditFile();
       await fetchDriveUser();
-      var data = await readDriveFile();
-      state.data = normalizeBody(data);
+      var remote = normalizeBody(await readDriveFile());
+      var auditDeleted = {};
+      try {
+        var audit = await readDriveJson(drive.auditFileId);
+        ((audit && audit.entries) || []).forEach(function (a) {
+          if (a.action === "delete") auditDeleted[auditKey(a.ledger, a.category, a)] = true;
+        });
+      } catch (e) { /* without the audit log, keep every local-only entry */ }
+      var pendingSnapshot = loadPending();
+      var merge = mergeOfflineChanges(state.data, remote, pendingSnapshot, auditDeleted);
+      if (merge.changed) await writeDriveFile(merge.data);
+      clearPending(pendingSnapshot);
+      state.data = merge.data;
       state.loaded = true;
       saveLocalCache(state.data);
       drive.status = "connected";
+      drive.notice = merge.rescued.length
+        ? "Synced with Google Drive \u2014 uploaded " + merge.rescued.length + " entr" + (merge.rescued.length === 1 ? "y" : "ies") + " saved on this device while offline"
+        : "";
       localStorage.setItem(LS_MODE_KEY, "drive");
       render();
+      for (var r = 0; r < merge.rescued.length; r++) {
+        await recordAudit("add", merge.rescued[r].ledger, merge.rescued[r].cat, merge.rescued[r].entry);
+      }
       materializeRecurring();
       startPolling();
       maybeRunMonthlyBackup();
@@ -2680,8 +2789,10 @@
       drive.pendingWrite = true;
       drive.status = "syncing";
       renderSyncBar();
+      var pendingSnapshot = loadPending();
       try {
         await writeDriveFile(nextData);
+        clearPending(pendingSnapshot);
         drive.status = "connected";
       } catch (e) {
         drive.status = "error";
@@ -2711,6 +2822,7 @@
     var next = Object.assign({}, state.data);
     next[ledgerKey] = nextLedger;
     if (!inSelectedMonth(entry.date)) goToMonthOf(entry.date);
+    notePending("upsert", stored.id);
     persist(next);
     recordAudit("add", ledgerKey, cat, entry);
   }
@@ -2729,6 +2841,7 @@
     var next = Object.assign({}, state.data);
     next[ledgerKey] = nextLedger;
     if (!inSelectedMonth(after.date)) goToMonthOf(after.date);
+    notePending("upsert", id);
     persist(next);
     recordAudit("edit", ledgerKey, cat, after, before);
   }
@@ -2740,6 +2853,7 @@
     nextLedger[cat] = list.filter(function (p) { return p.id !== id; });
     var next = Object.assign({}, state.data);
     next[ledgerKey] = nextLedger;
+    notePending("delete", id);
     persist(next);
     if (removed) recordAudit("delete", ledgerKey, cat, removed);
   }
