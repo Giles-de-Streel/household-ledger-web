@@ -1,6 +1,6 @@
 // Network-first: always try for the latest app, fall back to the cached copy offline.
 // Only same-origin GETs are cached; Google sign-in and Drive calls are never touched.
-var CACHE = "ledger-shell-v2";
+var CACHE = "ledger-shell-v3";
 var SHELL = ["./", "index.html", "manifest.webmanifest", "icon-192.png", "icon-512.png", "header-sky.jpg"];
 
 self.addEventListener("install", function (e) {
@@ -20,7 +20,9 @@ self.addEventListener("fetch", function (e) {
   var req = e.request;
   if (req.method !== "GET" || new URL(req.url).origin !== self.location.origin) return;
   e.respondWith(
-    fetch(req).then(function (res) {
+    // no-cache: revalidate with the server so a new build shows up immediately instead of
+    // waiting out GitHub Pages' 10-minute browser cache
+    fetch(req, { cache: "no-cache" }).then(function (res) {
       var copy = res.clone();
       caches.open(CACHE).then(function (c) { c.put(req, copy); });
       return res;
