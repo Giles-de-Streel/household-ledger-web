@@ -293,6 +293,7 @@
   .sync-dot.connected { background: var(--credit); }
   .sync-dot.error { background: var(--debit); }
   .sync-actions { display: flex; align-items: center; gap: 10px; }
+  .sync-btn.update-btn { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
   .sync-btn {
     all: unset;
     box-sizing: border-box;
@@ -1041,6 +1042,7 @@
       <span id="sync-label">Not connected — saving to this PC only</span>
     </div>
     <div class="sync-actions">
+      <button type="button" class="sync-btn update-btn" id="update-btn" data-action="reload-app" hidden>New version available &mdash; Reload</button>
       <button type="button" class="sync-btn" id="sync-connect-btn" data-action="connect-drive">Connect Google Drive</button>
       <button type="button" class="sync-link" id="sync-disconnect-btn" data-action="disconnect-drive" hidden>Disconnect</button>
     </div>
@@ -3160,7 +3162,8 @@
     var el = e.target.closest("[data-action]");
     if (!el) return;
     var action = el.getAttribute("data-action");
-    if (action === "connect-drive") connectDrive(true);
+    if (action === "reload-app") location.reload();
+    else if (action === "connect-drive") connectDrive(true);
     else if (action === "disconnect-drive") disconnectDrive();
   });
 
@@ -3355,7 +3358,41 @@
     if (e.key === "Escape" && reportOpen) closeReport();
   });
 
+  // ---------- New-version check ----------
+  // A tab can sit open for hours on an old build (or a refresh can land before a new build is
+  // live), so the page re-fetches its own source, bypassing caches, every few minutes and when
+  // the tab is shown again. If it differs from what was current at load, offer a Reload button
+  // (never reload automatically: that could lose a half-typed entry). Applies to the local
+  // ledger and the public site alike.
+
+  var appSourceHash = null;
+
+  function hashText(t) {
+    var h = 5381;
+    for (var i = 0; i < t.length; i++) h = ((h << 5) + h + t.charCodeAt(i)) | 0;
+    return t.length + ":" + h;
+  }
+
+  async function checkForNewVersion() {
+    try {
+      var res = await fetch(location.pathname, { cache: "no-store" });
+      if (!res.ok) return;
+      var hash = hashText(await res.text());
+      if (appSourceHash === null) { appSourceHash = hash; return; }
+      document.getElementById("update-btn").hidden = hash === appSourceHash;
+    } catch (e) { /* offline: try again later */ }
+  }
+
+  function startVersionChecks() {
+    checkForNewVersion();
+    setInterval(checkForNewVersion, 3 * 60 * 1000);
+    document.addEventListener("visibilitychange", function () {
+      if (document.visibilityState === "visible") checkForNewVersion();
+    });
+  }
+
   function init() {
+    startVersionChecks();
     state.data = loadLocalCache();
     state.loaded = true;
     render();
