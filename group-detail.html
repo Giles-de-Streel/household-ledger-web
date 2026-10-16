@@ -1,0 +1,53 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Household Ledger</title>
+<style>
+  body { margin: 0; padding: 32px 16px; font-family: system-ui, sans-serif; background: #F1EEE1; color: #22261F; }
+  @media (prefers-color-scheme: dark) { body { background: #16180F; color: #ECE7D6; } }
+  .gd-wait { max-width: 520px; margin: 40px auto; text-align: center; font-size: 0.95rem; opacity: 0.75; }
+  #gd-lost {
+    position: sticky; top: 0; z-index: 10; max-width: 960px; margin: 0 auto 12px; padding: 8px 12px;
+    border-radius: 6px; background: #9C4A3C; color: #FFF; font: 600 0.85rem/1.4 system-ui, sans-serif;
+  }
+</style>
+</head>
+<body>
+<div id="gd-lost" hidden></div>
+<div class="gd" id="gd-root"><div class="gd-wait">Loading&hellip;</div></div>
+<script>
+// Details view for one expense group. The main ledger tab that opened this one renders into it
+// and keeps it updated; this page only (re)connects to that tab, so the view survives a refresh
+// of this tab and a reload of the main tab. Opened as group-detail.html?group=<name>.
+(function () {
+  var group = new URLSearchParams(location.search).get("group") || "";
+  var lostEl = document.getElementById("gd-lost");
+  var misses = 0;
+
+  function mainTab() {
+    try { return window.opener && !window.opener.closed ? window.opener : null; } catch (e) { return null; }
+  }
+
+  function tick() {
+    var main = mainTab();
+    try {
+      if (main && main.__ledgerHasGroup && main.__ledgerHasGroup(group, window)) { misses = 0; lostEl.hidden = true; return; }
+      if (main && main.__ledgerAttachGroup) { main.__ledgerAttachGroup(group, window); misses = 0; lostEl.hidden = true; return; }
+    } catch (e) {}
+    misses += 1;
+    if (misses >= 3) {
+      lostEl.textContent = main
+        ? "Waiting for the main ledger tab…"
+        : "The main ledger tab was closed, so this view no longer updates. Open the ledger and click the group's header to see it again.";
+      lostEl.hidden = false;
+    }
+  }
+
+  tick();
+  setInterval(tick, 1500);
+})();
+</script>
+</body>
+</html>

@@ -8,7 +8,7 @@
 <meta name="theme-color" content="#17332B">
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&family=Outfit:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
   :root {
     --paper: #F1EEE1;
@@ -141,21 +141,26 @@
     padding: 16px 20px 12px;
   }
 
-  /* Title: clean, slightly larger serif in warm white with one soft shadow for lift off the photo. */
+  /* Title: lowercase geometric sans with a short, soft extrusion (three 1px steps in a dusk tone)
+     and a diffuse cast shadow: modern, slightly 3D, without the heavy gradient look. */
   .masthead h1 {
     margin: 0;
-    font-family: 'Fraunces', Georgia, serif;
-    font-weight: 600;
-    font-optical-sizing: auto;
-    font-size: 1.55rem;
-    line-height: 1.15;
-    letter-spacing: -0.01em;
+    font-family: 'Outfit', 'Inter', system-ui, sans-serif;
+    font-weight: 700;
+    font-size: 1.75rem;
+    line-height: 1.1;
+    letter-spacing: -0.025em;
+    text-transform: lowercase;
     text-wrap: balance;
-    color: #FFF8EC;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 4px 18px rgba(0, 0, 0, 0.25);
+    color: #FFFAF0;
+    text-shadow:
+      0 1px 0 rgba(222, 205, 180, 0.95),
+      0 2px 0 rgba(176, 150, 120, 0.9),
+      0 3px 0 rgba(120, 96, 72, 0.85),
+      0 6px 14px rgba(0, 0, 0, 0.35);
   }
   @media (max-width: 480px) {
-    .masthead h1 { font-size: 1.3rem; }
+    .masthead h1 { font-size: 1.4rem; }
   }
   .masthead > svg { width: 22px; height: 22px; opacity: 0.9; }
 
@@ -2214,27 +2219,45 @@
     return exp.groups.filter(function (g) { return g.name === name; })[0] || null;
   }
 
+  // Details tabs are group-detail.html?group=<name>: a small page that calls back into this tab
+  // (via window.opener) to be filled in, both when first opened and after it is refreshed. A
+  // refresh gives it a new document, which is how __ledgerHasGroup notices it must re-attach.
   function openGroupDetail(name) {
-    var group = findExpenseGroup(name);
-    if (!group) return;
+    if (!findExpenseGroup(name)) return;
     var existing = groupWindows[name];
-    if (existing && !existing.win.closed) { writeGroupWindow(name); existing.win.focus(); return; }
-    var w = window.open("", "ledger-group-" + name.replace(/[^A-Za-z0-9]+/g, "-"));
-    if (!w) return;
-    var fonts = document.querySelector('link[rel="stylesheet"]');
-    w.document.open();
-    w.document.write('<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">' +
-      '<title>' + escapeHtml(name) + ' — Household Ledger</title>' + (fonts ? fonts.outerHTML : '') +
-      document.querySelector("style").outerHTML + '<style>' + GROUP_DETAIL_CSS + '</style></head>' +
-      '<body><div class="gd" id="gd-root"></div></body></html>');
-    w.document.close();
-    var gw = groupWindows[name] = { win: w, ui: newUiState() };
-    var root = w.document.getElementById("gd-root");
+    if (existing && !existing.win.closed) { existing.win.focus(); return; }
+    var w = window.open("group-detail.html?group=" + encodeURIComponent(name), "ledger-group-" + name.replace(/[^A-Za-z0-9]+/g, "-"));
+    if (w) w.focus();
+  }
+
+  window.__ledgerHasGroup = function (name, w) {
+    var gw = groupWindows[name];
+    try { return !!(gw && gw.win === w && gw.doc === w.document); } catch (e) { return false; }
+  };
+
+  window.__ledgerAttachGroup = function (name, w) {
+    if (!findExpenseGroup(name)) return;
+    var prev = groupWindows[name];
+    var gw = groupWindows[name] = { win: w, ui: prev ? prev.ui : newUiState(), doc: null };
+    var d = w.document;
+    d.title = name + " \u2014 Household Ledger";
+    var css = document.querySelector("style").textContent + GROUP_DETAIL_CSS;
+    var styleEl = d.getElementById("ledger-styles");
+    if (styleEl) {
+      styleEl.textContent = css; // main tab may have reloaded with newer styles
+    } else {
+      var fonts = document.querySelector('link[rel="stylesheet"]');
+      d.head.insertAdjacentHTML("beforeend", (fonts ? fonts.outerHTML : "") + '<style id="ledger-styles">' + css + "</style>");
+    }
+    // Fresh container so listeners from a previous (since reloaded) main tab are dropped.
+    var oldRoot = d.getElementById("gd-root");
+    var root = oldRoot.cloneNode(false);
+    oldRoot.replaceWith(root);
     root.addEventListener("click", function (e) { handleLedgerClick(e, root, gw.ui); });
     root.addEventListener("submit", function (e) { handleLedgerSubmit(e, gw.ui); });
+    gw.doc = d;
     writeGroupWindow(name);
-    w.focus();
-  }
+  };
 
   function refreshGroupWindows() {
     Object.keys(groupWindows).forEach(function (name) {
@@ -2245,7 +2268,11 @@
 
   function writeGroupWindow(name) {
     var gw = groupWindows[name];
-    var root = gw && !gw.win.closed && gw.win.document.getElementById("gd-root");
+    var root = null;
+    try {
+      // skip while the tab is mid-refresh; it re-attaches itself once its new page has loaded
+      if (gw && !gw.win.closed && gw.doc === gw.win.document) root = gw.doc.getElementById("gd-root");
+    } catch (e) {}
     if (!root) return;
     ui = gw.ui;
     try {
@@ -2338,10 +2365,6 @@
     html += '</div></div>';
     return html;
   }
-
-  window.addEventListener("beforeunload", function () {
-    Object.keys(groupWindows).forEach(function (name) { if (!groupWindows[name].win.closed) groupWindows[name].win.close(); });
-  });
 
   function render() {
     var income = ledgerTotal("income");
