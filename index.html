@@ -1064,12 +1064,12 @@
   var now = new Date();
 
   var state = { data: emptyData(), loaded: false, loadError: "" };
-  var openCategory = null;
-  var addingCategory = null;
-  var editingEntry = null;
-  var addingCard = false;
-  var editingCardId = null;
-  var editingBudgetCat = null;
+  // Edit state for whichever surface is being rendered: the main ledger or a group detail tab.
+  function newUiState() {
+    return { openCategory: null, addingCategory: null, editingEntry: null, addingCard: false, editingCardId: null, editingBudgetCat: null };
+  }
+  var mainUi = newUiState();
+  var ui = mainUi;
   var selectedYear = now.getFullYear();
   var selectedMonth = now.getMonth();
   var auditLog = [];
@@ -1298,11 +1298,11 @@
     if (cards.length) {
       html += '<div class="cc-list">';
       for (var j = 0; j < cards.length; j++) {
-        html += editingCardId === cards[j].id ? renderCardForm("edit-card-form", cards[j]) : renderCardRow(cards[j]);
+        html += ui.editingCardId === cards[j].id ? renderCardForm("edit-card-form", cards[j]) : renderCardRow(cards[j]);
       }
       html += '</div>';
     }
-    html += addingCard
+    html += ui.addingCard
       ? renderCardForm("add-card-form")
       : '<button type="button" class="add-toggle" data-action="show-add-card">' + ICONS.plus + ' Add account</button>';
     html += '</div>';
@@ -1316,7 +1316,7 @@
   }
 
   function renderBudgetRow(cat, spent, budget) {
-    if (editingBudgetCat === cat) {
+    if (ui.editingBudgetCat === cat) {
       return (
         '<form class="add-form budget-form" data-role="budget-form" data-cat="' + escapeHtml(cat) + '">' +
           '<input type="number" name="budget" step="0.01" min="0.01" placeholder="Monthly budget" value="' + (budget ? escapeHtml(budget) : '') + '" required>' +
@@ -1341,8 +1341,8 @@
 
   function renderCategory(ledger, cat) {
     var list = monthList(ledger.key, cat);
-    var isOpen = openCategory && openCategory.ledger === ledger.key && openCategory.cat === cat;
-    var isAdding = addingCategory && addingCategory.ledger === ledger.key && addingCategory.cat === cat;
+    var isOpen = ui.openCategory && ui.openCategory.ledger === ledger.key && ui.openCategory.cat === cat;
+    var isAdding = ui.addingCategory && ui.addingCategory.ledger === ledger.key && ui.addingCategory.cat === cat;
     var total = categoryTotal(ledger.key, cat);
     var budget = budgetFor(ledger, cat);
     var html = '<div class="cat">';
@@ -1366,7 +1366,7 @@
       if (ledger.key === "expenses") html += renderBudgetRow(cat, total, budget);
       if (categoryGroupName(ledger, cat) === DEBT_GROUP_NAME) html += renderCreditCardsPanel(cat, total);
       for (var i = 0; i < list.length; i++) {
-        var isEditing = editingEntry && editingEntry.ledger === ledger.key && editingEntry.cat === cat && editingEntry.id === list[i].id;
+        var isEditing = ui.editingEntry && ui.editingEntry.ledger === ledger.key && ui.editingEntry.cat === cat && ui.editingEntry.id === list[i].id;
         html += isEditing ? renderEditForm(ledger, cat, list[i]) : renderPurchaseRow(ledger, cat, list[i]);
       }
       if (isAdding) {
@@ -2022,6 +2022,7 @@
   // ---------- Group detail tabs ----------
   // Clicking an expense group header opens a same-origin tab that this page writes into
   // and keeps refreshed on every render(), so it follows edits, Drive sync and month changes.
+  // Each tab has its own edit state (ui) but shares the main page's click/submit handlers.
 
   var groupWindows = {};
 
@@ -2039,8 +2040,7 @@
     '.gd .rp-table td.desc { font-family: "Inter", sans-serif; text-align: left; white-space: normal; }' +
     '.gd .rp-table td.dim { color: var(--ink-soft); }' +
     '.gd .rp-table tfoot td { font-weight: 600; border-top: 2px solid var(--rule); }' +
-    '.gd .recur { color: var(--ink-soft); font-size: 0.72rem; margin-left: 4px; }' +
-    '.gd-note { font-size: 0.75rem; color: var(--ink-soft); margin-top: 8px; }';
+    '.gd-card > .group { margin: 0 -16px -14px; border: none; border-top: 1px solid var(--rule); border-radius: 0 0 6px 6px; }';
 
   function findExpenseGroup(name) {
     var exp = LEDGERS.filter(function (l) { return l.key === "expenses"; })[0];
@@ -2051,7 +2051,7 @@
     var group = findExpenseGroup(name);
     if (!group) return;
     var existing = groupWindows[name];
-    if (existing && !existing.closed) { writeGroupWindow(name); existing.focus(); return; }
+    if (existing && !existing.win.closed) { writeGroupWindow(name); existing.win.focus(); return; }
     var w = window.open("", "ledger-group-" + name.replace(/[^A-Za-z0-9]+/g, "-"));
     if (!w) return;
     var fonts = document.querySelector('link[rel="stylesheet"]');
@@ -2061,22 +2061,32 @@
       document.querySelector("style").outerHTML + '<style>' + GROUP_DETAIL_CSS + '</style></head>' +
       '<body><div class="gd" id="gd-root"></div></body></html>');
     w.document.close();
-    groupWindows[name] = w;
+    var gw = groupWindows[name] = { win: w, ui: newUiState() };
+    var root = w.document.getElementById("gd-root");
+    root.addEventListener("click", function (e) { handleLedgerClick(e, root, gw.ui); });
+    root.addEventListener("submit", function (e) { handleLedgerSubmit(e, gw.ui); });
     writeGroupWindow(name);
     w.focus();
   }
 
   function refreshGroupWindows() {
     Object.keys(groupWindows).forEach(function (name) {
-      if (groupWindows[name].closed) delete groupWindows[name];
+      if (groupWindows[name].win.closed) delete groupWindows[name];
       else writeGroupWindow(name);
     });
   }
 
   function writeGroupWindow(name) {
-    var w = groupWindows[name];
-    var root = w && !w.closed && w.document.getElementById("gd-root");
-    if (root) root.innerHTML = renderGroupDetail(findExpenseGroup(name));
+    var gw = groupWindows[name];
+    var root = gw && !gw.win.closed && gw.win.document.getElementById("gd-root");
+    if (!root) return;
+    ui = gw.ui;
+    try {
+      root.innerHTML = renderGroupDetail(findExpenseGroup(name));
+      focusOpenForm(root, gw.ui);
+    } finally {
+      ui = mainUi;
+    }
   }
 
   function renderGroupDetail(group) {
@@ -2155,27 +2165,15 @@
     }
     html += '</tbody></table></div></div>';
 
-    // This month's entries
-    var entries = [];
-    cats.forEach(function (c) { monthList("expenses", c).forEach(function (p) { entries.push({ cat: c, p: p }); }); });
-    entries.sort(function (a, b) { return a.p.date < b.p.date ? -1 : a.p.date > b.p.date ? 1 : 0; });
-    html += '<div class="gd-card"><h2>Entries &middot; ' + escapeHtml(monthLabel) + '</h2>';
-    if (!entries.length) {
-      html += '<div class="empty-note">No entries in this group for ' + escapeHtml(monthLabel) + '.</div>';
-    } else {
-      html += '<div class="gd-scroll"><table class="rp-table"><thead><tr><th>Date</th><th>Category</th><th>Description</th><th>Amount</th></tr></thead><tbody>';
-      entries.forEach(function (e) {
-        html += '<tr><td>' + escapeHtml(formatDate(e.p.date)) + '</td><td class="desc">' + escapeHtml(e.cat) + '</td><td class="desc">' + escapeHtml(e.p.description || "") +
-          (e.p.seriesId ? '<span class="recur">(monthly)</span>' : '') + '</td><td>$' + formatMoney(e.p.amount) + '</td></tr>';
-      });
-      html += '</tbody></table></div>';
-    }
-    html += '<div class="gd-note">To add or edit entries, use the main ledger window &mdash; this page updates automatically.</div></div>';
+    // This month's entries, editable exactly like the main ledger
+    html += '<div class="gd-card"><h2>Entries &middot; ' + escapeHtml(monthLabel) + '</h2><div class="group">';
+    cats.forEach(function (c) { html += renderCategory(exp, c); });
+    html += '</div></div>';
     return html;
   }
 
   window.addEventListener("beforeunload", function () {
-    Object.keys(groupWindows).forEach(function (name) { if (!groupWindows[name].closed) groupWindows[name].close(); });
+    Object.keys(groupWindows).forEach(function (name) { if (!groupWindows[name].win.closed) groupWindows[name].win.close(); });
   });
 
   function render() {
@@ -2202,15 +2200,18 @@
     }
 
     ledgerRoot.innerHTML = renderListView();
+    focusOpenForm(ledgerRoot, mainUi);
     refreshGroupWindows();
+  }
 
-    if (addingCategory) {
-      var form = ledgerRoot.querySelector('form[data-role="add-form"][data-ledger="' + addingCategory.ledger + '"][data-cat="' + cssEscape(addingCategory.cat) + '"]');
+  function focusOpenForm(root, u) {
+    if (u.addingCategory) {
+      var form = root.querySelector('form[data-role="add-form"][data-ledger="' + u.addingCategory.ledger + '"][data-cat="' + cssEscape(u.addingCategory.cat) + '"]');
       var descInput = form && form.querySelector('input[name="description"]');
       if (descInput) descInput.focus();
     }
-    if (editingEntry) {
-      var eform = ledgerRoot.querySelector('form[data-role="edit-form"][data-id="' + cssEscape(editingEntry.id) + '"]');
+    if (u.editingEntry) {
+      var eform = root.querySelector('form[data-role="edit-form"][data-id="' + cssEscape(u.editingEntry.id) + '"]');
       var edescInput = eform && eform.querySelector('input[name="description"]');
       if (edescInput) edescInput.focus();
     }
@@ -2757,7 +2758,7 @@
     if (e.key === "Enter") { e.preventDefault(); shareFile(); }
   });
 
-  ledgerRoot.addEventListener("click", function (e) {
+  function handleLedgerClick(e, root, u) {
     var el = e.target.closest("[data-action]");
     if (!el) return;
     var action = el.getAttribute("data-action");
@@ -2767,67 +2768,67 @@
     if (action === "open-group-detail") {
       openGroupDetail(el.getAttribute("data-group"));
     } else if (action === "toggle-category") {
-      var isSame = openCategory && openCategory.ledger === ledgerKey && openCategory.cat === cat;
-      openCategory = isSame ? null : { ledger: ledgerKey, cat: cat };
-      addingCategory = null;
-      editingEntry = null;
-      addingCard = false;
-      editingCardId = null;
-      editingBudgetCat = null;
+      var isSame = u.openCategory && u.openCategory.ledger === ledgerKey && u.openCategory.cat === cat;
+      u.openCategory = isSame ? null : { ledger: ledgerKey, cat: cat };
+      u.addingCategory = null;
+      u.editingEntry = null;
+      u.addingCard = false;
+      u.editingCardId = null;
+      u.editingBudgetCat = null;
       render();
     } else if (action === "edit-budget") {
-      editingBudgetCat = cat;
+      u.editingBudgetCat = cat;
       render();
-      var bInput = ledgerRoot.querySelector('form[data-role="budget-form"] input[name="budget"]');
+      var bInput = root.querySelector('form[data-role="budget-form"] input[name="budget"]');
       if (bInput) bInput.focus();
     } else if (action === "cancel-budget") {
-      editingBudgetCat = null;
+      u.editingBudgetCat = null;
       render();
     } else if (action === "clear-budget") {
-      editingBudgetCat = null;
+      u.editingBudgetCat = null;
       setBudget(cat, null);
     } else if (action === "show-add") {
-      addingCategory = { ledger: ledgerKey, cat: cat };
-      editingEntry = null;
+      u.addingCategory = { ledger: ledgerKey, cat: cat };
+      u.editingEntry = null;
       render();
     } else if (action === "cancel-add") {
-      addingCategory = null;
+      u.addingCategory = null;
       render();
     } else if (action === "edit-entry") {
-      editingEntry = { ledger: ledgerKey, cat: cat, id: el.getAttribute("data-id") };
-      addingCategory = null;
+      u.editingEntry = { ledger: ledgerKey, cat: cat, id: el.getAttribute("data-id") };
+      u.addingCategory = null;
       render();
     } else if (action === "cancel-edit") {
-      editingEntry = null;
+      u.editingEntry = null;
       render();
     } else if (action === "delete-entry") {
       var deletedId = el.getAttribute("data-id");
-      if (editingEntry && editingEntry.id === deletedId) editingEntry = null;
+      if (u.editingEntry && u.editingEntry.id === deletedId) u.editingEntry = null;
       deleteEntry(ledgerKey, cat, deletedId);
     } else if (action === "stop-recur") {
       stopRecurring(ledgerKey, cat, el.getAttribute("data-series"));
     } else if (action === "show-add-card") {
-      addingCard = true;
-      editingCardId = null;
+      u.addingCard = true;
+      u.editingCardId = null;
       render();
     } else if (action === "cancel-add-card") {
-      addingCard = false;
+      u.addingCard = false;
       render();
     } else if (action === "edit-card") {
-      editingCardId = el.getAttribute("data-id");
-      addingCard = false;
+      u.editingCardId = el.getAttribute("data-id");
+      u.addingCard = false;
       render();
     } else if (action === "cancel-edit-card") {
-      editingCardId = null;
+      u.editingCardId = null;
       render();
     } else if (action === "delete-card") {
       var deletedCardId = el.getAttribute("data-id");
-      if (editingCardId === deletedCardId) editingCardId = null;
-      deleteCreditCard(openCategory.cat, deletedCardId);
+      if (u.editingCardId === deletedCardId) u.editingCardId = null;
+      deleteCreditCard(u.openCategory.cat, deletedCardId);
     }
-  });
+  }
 
-  ledgerRoot.addEventListener("submit", function (e) {
+  function handleLedgerSubmit(e, u) {
     var addForm = e.target.closest('form[data-role="add-form"]');
     var editForm = e.target.closest('form[data-role="edit-form"]');
     var addCardForm = e.target.closest('form[data-role="add-card-form"]');
@@ -2839,7 +2840,7 @@
     if (budgetForm) {
       var budgetAmount = parseFloat(budgetForm.elements["budget"].value);
       if (isNaN(budgetAmount) || budgetAmount <= 0) return;
-      editingBudgetCat = null;
+      u.editingBudgetCat = null;
       setBudget(budgetForm.getAttribute("data-cat"), budgetAmount);
       return;
     }
@@ -2853,11 +2854,11 @@
       if (!cardName || isNaN(cardBalance) || cardBalance < 0 || isNaN(cardMinPayment) || cardMinPayment < 0) return;
       if (editCardForm) {
         var cardId = editCardForm.getAttribute("data-id");
-        editingCardId = null;
-        editCreditCard(openCategory.cat, cardId, { name: cardName, balance: cardBalance, minPayment: cardMinPayment, autopay: cardAutopay });
+        u.editingCardId = null;
+        editCreditCard(u.openCategory.cat, cardId, { name: cardName, balance: cardBalance, minPayment: cardMinPayment, autopay: cardAutopay });
       } else {
-        addingCard = false;
-        addCreditCard(openCategory.cat, { name: cardName, balance: cardBalance, minPayment: cardMinPayment, autopay: cardAutopay });
+        u.addingCard = false;
+        addCreditCard(u.openCategory.cat, { name: cardName, balance: cardBalance, minPayment: cardMinPayment, autopay: cardAutopay });
       }
       return;
     }
@@ -2870,7 +2871,7 @@
       var editDescription = editForm.elements["description"].value.trim();
       var editAmount = parseFloat(editForm.elements["amount"].value);
       if (!editDescription || !editAmount || editAmount <= 0) return;
-      editingEntry = null;
+      u.editingEntry = null;
       editEntry(editLedgerKey, editCat, editId, { date: editDate, description: editDescription, amount: editAmount });
       return;
     }
@@ -2883,9 +2884,12 @@
     if (!description || !amount || amount <= 0) return;
     var recurringEl = addForm.elements["recurring"];
     var recurring = !!(recurringEl && recurringEl.checked);
-    addingCategory = null;
+    u.addingCategory = null;
     addEntry(ledgerKey, cat, { date: date, description: description, amount: amount, recurring: recurring });
-  });
+  }
+
+  ledgerRoot.addEventListener("click", function (e) { handleLedgerClick(e, ledgerRoot, mainUi); });
+  ledgerRoot.addEventListener("submit", function (e) { handleLedgerSubmit(e, mainUi); });
 
   document.querySelector('[data-action="open-audit"]').addEventListener("click", openAudit);
   document.querySelector('[data-action="open-report"]').addEventListener("click", openReport);
