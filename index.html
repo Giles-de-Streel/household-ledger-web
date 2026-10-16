@@ -645,7 +645,24 @@
     cursor: pointer;
   }
   .recur-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-  .recur-yr { font-size: 0.6rem; font-weight: 600; margin-left: 1px; vertical-align: 1px; }
+  .yearly-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    flex-shrink: 0;
+    background: var(--grp-4);
+    color: var(--paper);
+    font-family: 'Inter', sans-serif;
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 2px 7px 2px 5px;
+    border-radius: 20px;
+  }
+  .yearly-pill svg { width: 10px; height: 10px; }
+  .purchase-row .desc.stacked { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+  .desc.stacked .desc-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 
   .cc-panel { padding: 10px 14px 10px 34px; border-bottom: 1px solid var(--rule); }
   .cc-summary { display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 8px; }
@@ -1280,12 +1297,17 @@
   function renderPurchaseRow(ledger, cat, p, opts) {
     opts = opts || {};
     var showCat = !!opts.showCat;
-    var recurBadge = p.seriesId ? ' <span class="recur-badge" title="' + escapeHtml(recurDescription(p)) + '">' + ICONS.repeat + (isYearly(p) ? '<span class="recur-yr">1y</span>' : '') + '</span>' : '';
+    var recurBadge = p.seriesId ? ' <span class="recur-badge" title="' + escapeHtml(recurDescription(p)) + '">' + ICONS.repeat + '</span>' : '';
+    var yearlyPill = p.seriesId && isYearly(p)
+      ? '<span class="yearly-pill" title="' + escapeHtml(recurDescription(p)) + '">' + ICONS.repeat + ' Yearly</span>'
+      : '';
     return (
       '<div class="purchase-row' + (opts.flush ? ' flush' : '') + '" data-tone="' + ledger.tone + '">' +
         (showCat ? '' : '<span class="date">' + escapeHtml(formatDate(p.date)) + '</span>') +
         (showCat ? '<span class="cat-tag">' + escapeHtml(cat) + '</span>' : '') +
-        '<span class="desc">' + escapeHtml(p.description) + recurBadge + '</span>' +
+        (yearlyPill
+          ? '<span class="desc stacked"><span class="desc-name">' + escapeHtml(p.description) + '</span>' + yearlyPill + '</span>'
+          : '<span class="desc">' + escapeHtml(p.description) + recurBadge + '</span>') +
         '<span class="amt">$' + formatMoney(p.amount) + '</span>' +
         (p.seriesId ? '<button type="button" class="stop-recur" data-action="stop-recur" data-ledger="' + ledger.key + '" data-cat="' + escapeHtml(cat) + '" data-series="' + escapeHtml(p.seriesId) + '" title="Stop repeating ' + (isYearly(p) ? 'yearly' : 'monthly') + '">' + ICONS.repeatOff + '</button>' : '') +
         '<button type="button" class="edit-btn" data-action="edit-entry" data-ledger="' + ledger.key + '" data-cat="' + escapeHtml(cat) + '" data-id="' + escapeHtml(p.id) + '" aria-label="Edit entry">' + ICONS.pencil + '</button>' +
