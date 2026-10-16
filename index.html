@@ -2856,17 +2856,25 @@
     renderSyncBar();
     try {
       await requestAccessToken(interactive);
-      await findOrCreateDriveFile();
-      await findOrCreateAuditFile();
-      await fetchDriveUser();
-      var remote = normalizeBody(await readDriveFile());
+      // Everything at once: checking the two files, the user's name and both reads were five
+      // sequential round trips (~1.4s). The speculative reads use the remembered file IDs and are
+      // only redone if a check had to switch to a different file (e.g. the old one was trashed).
+      var knownFileId = drive.fileId, knownAuditId = drive.auditFileId;
+      var results = await Promise.all([
+        findOrCreateDriveFile(),
+        findOrCreateAuditFile(),
+        fetchDriveUser(),
+        knownFileId ? readDriveJson(knownFileId).catch(function () { return undefined; }) : undefined,
+        knownAuditId ? readDriveJson(knownAuditId).catch(function () { return null; }) : null
+      ]);
+      var remoteRaw = drive.fileId === knownFileId && results[3] !== undefined ? results[3] : await readDriveJson(drive.fileId);
+      var remote = normalizeBody(remoteRaw || emptyData());
+      var audit = drive.auditFileId === knownAuditId ? results[4] : await readDriveJson(drive.auditFileId).catch(function () { return null; });
       var auditDeleted = {};
-      try {
-        var audit = await readDriveJson(drive.auditFileId);
-        ((audit && audit.entries) || []).forEach(function (a) {
-          if (a.action === "delete") auditDeleted[auditKey(a.ledger, a.category, a)] = true;
-        });
-      } catch (e) { /* without the audit log, keep every local-only entry */ }
+      // without the audit log, keep every local-only entry
+      ((audit && audit.entries) || []).forEach(function (a) {
+        if (a.action === "delete") auditDeleted[auditKey(a.ledger, a.category, a)] = true;
+      });
       var pendingSnapshot = loadPending();
       var merge = mergeOfflineChanges(state.data, remote, pendingSnapshot, auditDeleted);
       if (merge.changed) await writeDriveFile(merge.data);
