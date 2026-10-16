@@ -1,7 +1,7 @@
 // Network-first: always try for the latest app, fall back to the cached copy offline.
 // Only same-origin GETs are cached; Google sign-in and Drive calls are never touched.
-var CACHE = "ledger-shell-v1";
-var SHELL = ["./", "index.html", "manifest.webmanifest", "icon-192.png", "icon-512.png"];
+var CACHE = "ledger-shell-v2";
+var SHELL = ["./", "index.html", "manifest.webmanifest", "icon-192.png", "icon-512.png", "header-sky.jpg"];
 
 self.addEventListener("install", function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(SHELL); }));
