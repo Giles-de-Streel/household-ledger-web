@@ -625,7 +625,18 @@
     white-space: nowrap;
   }
   .recur-check input { width: auto; }
-  .recur-select { width: auto; font-size: 0.8rem; }
+  .recur-pick { flex-basis: 100%; color: var(--ink); font-weight: 500; }
+  .recur-select {
+    font-family: 'Inter', sans-serif;
+    font-size: 0.85rem;
+    border: 1px solid var(--rule);
+    background: var(--paper);
+    color: var(--ink);
+    border-radius: 4px;
+    padding: 5px 8px;
+    cursor: pointer;
+  }
+  .recur-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   .recur-yr { font-size: 0.6rem; font-weight: 600; margin-left: 1px; vertical-align: 1px; }
 
   .cc-panel { padding: 10px 14px 10px 34px; border-bottom: 1px solid var(--rule); }
@@ -1290,8 +1301,9 @@
   function renderAddForm(ledger, cat) {
     var recurField = "";
     if (YEARLY_RECUR_CATEGORIES[cat]) {
-      recurField = '<select class="recur-select" name="repeat" aria-label="Repeats">' +
-        '<option value="">Doesn&rsquo;t repeat</option><option value="monthly">Repeats monthly</option><option value="yearly">Repeats yearly</option></select>';
+      recurField = '<label class="recur-check recur-pick">Repeat ' +
+        '<select class="recur-select" name="repeat">' +
+        '<option value="">Never (one-time)</option><option value="monthly">Monthly</option><option value="yearly">Yearly</option></select></label>';
     } else if (RECUR_CATEGORIES[cat]) {
       recurField = '<label class="recur-check"><input type="checkbox" name="recurring"> Repeats monthly</label>';
     }
