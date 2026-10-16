@@ -1383,7 +1383,7 @@
   function renderGroup(ledger, group) {
     var html = '<div class="group">';
     if (group.name && ledger.key === "expenses") {
-      html += '<button type="button" class="group-header" data-action="open-group-detail" data-group="' + escapeHtml(group.name) + '" title="Open ' + escapeHtml(group.name) + ' details in a new window">' +
+      html += '<button type="button" class="group-header" data-action="open-group-detail" data-group="' + escapeHtml(group.name) + '" title="Open ' + escapeHtml(group.name) + ' details in a new tab">' +
         '<span class="gh-name">' + escapeHtml(group.name) + '<span class="gh-icon" aria-hidden="true">' + ICONS.external + '</span></span>' +
         '<span class="amt">$' + formatMoney(groupTotal(ledger.key, group)) + '</span></button>';
     } else if (group.name) {
@@ -2019,8 +2019,8 @@
     auditOverlayEl.hidden = true;
   }
 
-  // ---------- Group detail windows ----------
-  // Clicking an expense group header opens a same-origin popup that this page writes into
+  // ---------- Group detail tabs ----------
+  // Clicking an expense group header opens a same-origin tab that this page writes into
   // and keeps refreshed on every render(), so it follows edits, Drive sync and month changes.
 
   var groupWindows = {};
@@ -2052,7 +2052,7 @@
     if (!group) return;
     var existing = groupWindows[name];
     if (existing && !existing.closed) { writeGroupWindow(name); existing.focus(); return; }
-    var w = window.open("", "ledger-group-" + name.replace(/[^A-Za-z0-9]+/g, "-"), "width=980,height=860");
+    var w = window.open("", "ledger-group-" + name.replace(/[^A-Za-z0-9]+/g, "-"));
     if (!w) return;
     var fonts = document.querySelector('link[rel="stylesheet"]');
     w.document.open();
