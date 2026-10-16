@@ -9,7 +9,6 @@
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   :root {
     --paper: #F1EEE1;
@@ -1016,6 +1015,7 @@
         <button type="button" data-action="export-csv">Export Monthly Report</button>
         <button type="button" data-action="export-all">Export All History</button>
         <button type="button" data-action="export-audit">Export Audit Log</button>
+        <button type="button" data-action="backup-now">Back up to Drive now</button>
       </div>
     </div>
   </div>
@@ -1142,6 +1142,9 @@
   var LS_FILEID_KEY = "household-ledger-drive-file-id";
   var LS_AUDIT_FILEID_KEY = "household-ledger-drive-audit-file-id";
   var LS_PENDING_KEY = "household-ledger-pending-changes";
+  var LS_TOKEN_KEY = "household-ledger-google-token";
+  var SS_OAUTH_KEY = "household-ledger-oauth-request";
+  var LS_SILENT_AT_KEY = "household-ledger-silent-signin-at";
 
   var now = new Date();
 
@@ -1169,7 +1172,6 @@
   var drive = {
     status: "disconnected", // disconnected | connecting | connected | syncing | error
     message: "",
-    tokenClient: null,
     accessToken: null,
     fileId: localStorage.getItem(LS_FILEID_KEY) || null,
     auditFileId: localStorage.getItem(LS_AUDIT_FILEID_KEY) || null,
@@ -2103,7 +2105,7 @@
     syncLabelEl.classList.toggle("unsynced", !!unsynced && offline);
     var isConnected = drive.status === "connected" || drive.status === "syncing";
     connectBtnEl.hidden = isConnected;
-    connectBtnEl.textContent = drive.status === "error" ? "Retry connecting" : "Connect Google Drive";
+    connectBtnEl.textContent = drive.status === "error" ? (loadToken() ? "Retry connecting" : "Reconnect") : "Connect Google Drive";
     disconnectBtnEl.hidden = !isConnected;
     shareRowEl.hidden = !isConnected;
   }
@@ -2230,8 +2232,7 @@
     if (!root) return;
     ui = gw.ui;
     try {
-      root.innerHTML = renderGroupDetail(findExpenseGroup(name));
-      focusOpenForm(root, gw.ui);
+      renderKeepingForms(root, renderGroupDetail(findExpenseGroup(name)), gw.ui);
     } finally {
       ui = mainUi;
     }
@@ -2348,9 +2349,52 @@
       return;
     }
 
-    ledgerRoot.innerHTML = renderListView();
-    focusOpenForm(ledgerRoot, mainUi);
+    renderKeepingForms(ledgerRoot, renderListView(), mainUi);
     refreshGroupWindows();
+  }
+
+  // Re-rendering replaces the DOM, which would wipe half-typed form fields whenever a Drive poll,
+  // a tab switch or a change in another tab triggers render(). Carry typed values, focus and the
+  // caret across the re-render; only a form that wasn't open before gets the initial focus.
+  function formKey(f) {
+    return ["role", "ledger", "cat", "id"].map(function (a) { return f.getAttribute("data-" + a) || ""; }).join("|");
+  }
+
+  function renderKeepingForms(root, html, u) {
+    var doc = root.ownerDocument;
+    var saved = {};
+    root.querySelectorAll("form").forEach(function (f) {
+      var vals = {};
+      Array.prototype.forEach.call(f.elements, function (el) {
+        if (el.name) vals[el.name] = el.type === "checkbox" ? el.checked : el.value;
+      });
+      saved[formKey(f)] = vals;
+    });
+    var active = doc.activeElement;
+    var focus = null;
+    if (active && active.form && root.contains(active) && active.name) {
+      focus = { key: formKey(active.form), name: active.name, start: null, end: null };
+      try { focus.start = active.selectionStart; focus.end = active.selectionEnd; } catch (e) {}
+    }
+
+    root.innerHTML = html;
+
+    var hadNewForm = false;
+    root.querySelectorAll("form").forEach(function (f) {
+      var vals = saved[formKey(f)];
+      if (!vals) { hadNewForm = true; return; }
+      Object.keys(vals).forEach(function (name) {
+        var el = f.elements[name];
+        if (!el || !el.name) return;
+        if (el.type === "checkbox") el.checked = vals[name]; else el.value = vals[name];
+      });
+      if (focus && focus.key === formKey(f) && f.elements[focus.name]) {
+        var target = f.elements[focus.name];
+        target.focus();
+        try { if (focus.start !== null) target.setSelectionRange(focus.start, focus.end); } catch (e) {}
+      }
+    });
+    if (hadNewForm) focusOpenForm(root, u);
   }
 
   function focusOpenForm(root, u) {
@@ -2483,27 +2527,83 @@
 
   function driveAuthHeaders() { return { Authorization: "Bearer " + drive.accessToken }; }
 
-  function ensureTokenClient() {
-    if (drive.tokenClient) return drive.tokenClient;
-    drive.tokenClient = google.accounts.oauth2.initTokenClient({
-      client_id: GOOGLE_CLIENT_ID,
-      scope: DRIVE_SCOPE,
-      callback: function () {}
-    });
-    return drive.tokenClient;
+  // ---------- Google sign-in: full-page redirect (no popup) ----------
+  // Signing in sends this tab to Google and back; Google returns an access token in the URL
+  // fragment (OAuth 2.0 for client-side web apps). The token lasts about an hour and is kept in
+  // localStorage so reloads and new tabs reuse it. When it expires the sync bar asks to reconnect
+  // rather than navigating away on its own (a reload could lose a half-typed entry).
+  // The redirect URI (this page's address) must be listed under the OAuth client's
+  // "Authorized redirect URIs" in Google Cloud Console.
+
+  function oauthRedirectUri() {
+    return location.origin + location.pathname.replace(/index\.html$/, "");
   }
 
-  function requestAccessToken(interactive) {
-    return new Promise(function (resolve, reject) {
-      var client = ensureTokenClient();
-      client.callback = function (resp) {
-        if (resp && resp.error) { reject(resp); return; }
-        drive.accessToken = resp.access_token;
-        resolve(drive.accessToken);
-      };
-      client.error_callback = function (err) { reject(err); };
-      client.requestAccessToken({ prompt: interactive ? "consent" : "" });
+  function saveToken(token, expiresAt) {
+    try { localStorage.setItem(LS_TOKEN_KEY, JSON.stringify({ token: token, exp: expiresAt })); } catch (e) {}
+  }
+  function loadToken() {
+    try {
+      var t = JSON.parse(localStorage.getItem(LS_TOKEN_KEY) || "null");
+      return t && t.token && t.exp > Date.now() ? t.token : null;
+    } catch (e) { return null; }
+  }
+  function clearToken() {
+    drive.accessToken = null;
+    try { localStorage.removeItem(LS_TOKEN_KEY); } catch (e) {}
+  }
+
+  function startGoogleSignIn(silent) {
+    var stateId = makeId();
+    try {
+      sessionStorage.setItem(SS_OAUTH_KEY, JSON.stringify({ state: stateId, y: selectedYear, m: selectedMonth }));
+      if (silent) localStorage.setItem(LS_SILENT_AT_KEY, String(Date.now()));
+    } catch (e) {}
+    var params = new URLSearchParams({
+      client_id: GOOGLE_CLIENT_ID,
+      redirect_uri: oauthRedirectUri(),
+      response_type: "token",
+      scope: DRIVE_SCOPE,
+      include_granted_scopes: "true",
+      state: stateId
     });
+    if (silent) params.set("prompt", "none");
+    drive.status = "connecting";
+    renderSyncBar();
+    location.assign("https://accounts.google.com/o/oauth2/v2/auth?" + params.toString());
+  }
+
+  // After Google redirects back: read the token (or error) from the URL fragment, then clean the URL.
+  function takeSignInResult() {
+    var hash = location.hash.replace(/^#/, "");
+    if (!/(^|&)(access_token|error)=/.test(hash)) return null;
+    var q = new URLSearchParams(hash);
+    history.replaceState(null, "", location.pathname + location.search);
+    var saved = null;
+    try {
+      saved = JSON.parse(sessionStorage.getItem(SS_OAUTH_KEY) || "null");
+      sessionStorage.removeItem(SS_OAUTH_KEY);
+    } catch (e) {}
+    if (!saved || saved.state !== q.get("state")) return { error: "state_mismatch" };
+    if (typeof saved.y === "number") { selectedYear = saved.y; selectedMonth = saved.m; }
+    if (q.get("error")) return { error: q.get("error") };
+    var expiresIn = Number(q.get("expires_in")) || 3600;
+    saveToken(q.get("access_token"), Date.now() + (expiresIn - 120) * 1000);
+    return { token: true };
+  }
+
+  // interactive: allowed to send the tab to Google's sign-in page (only from a button click).
+  function requestAccessToken(interactive) {
+    var token = loadToken();
+    if (token) {
+      drive.accessToken = token;
+      return Promise.resolve(token);
+    }
+    if (interactive) {
+      startGoogleSignIn(false);
+      return new Promise(function () {}); // the page is navigating away
+    }
+    return Promise.reject(new Error("Google sign-in expired \u2014 click Reconnect to sign in again."));
   }
 
   async function driveFetch(url, options, retried) {
@@ -2511,6 +2611,7 @@
     options.headers = Object.assign({}, options.headers, driveAuthHeaders());
     var res = await fetch(url, options);
     if (res.status === 401 && !retried) {
+      clearToken();
       await requestAccessToken(false);
       return driveFetch(url, options, true);
     }
@@ -2612,6 +2713,31 @@
     }
   }
 
+  // On-demand snapshot of everything (entries, budgets, cards) into its own dated Drive file.
+  async function backupNow() {
+    if (drive.status !== "connected" && drive.status !== "syncing") {
+      drive.status = "error";
+      drive.message = "Connect to Google Drive first to back up";
+      renderSyncBar();
+      return;
+    }
+    var d = new Date();
+    var stamp = todayISO() + "-" + pad2(d.getHours()) + pad2(d.getMinutes());
+    var name = "household-ledger-backup-" + stamp + ".json";
+    drive.notice = "Backing up to Google Drive\u2026";
+    renderSyncBar();
+    try {
+      var result = await findOrCreateNamedFile(name, null);
+      await writeDriveJson(result.id, { backupFor: "manual", createdAt: d.toISOString(), data: state.data });
+      drive.notice = "Backed up to Google Drive as " + name;
+    } catch (e) {
+      drive.notice = "";
+      drive.status = "error";
+      drive.message = "Backup failed: " + ((e && e.message) || "unknown error");
+    }
+    renderSyncBar();
+  }
+
   function maybeRunMonthlyBackup() {
     if (drive.status !== "connected" && drive.status !== "syncing") return;
     var today = todayISO();
@@ -2689,7 +2815,13 @@
       render();
       maybeRunMonthlyBackup();
     } catch (e) {
-      // keep showing the last known-good state; next poll tries again
+      // keep showing the last known-good state; next poll tries again, unless sign-in expired
+      if (!loadToken()) {
+        stopPolling();
+        drive.status = "error";
+        drive.message = (e && e.message) || "Google sign-in expired.";
+        renderSyncBar();
+      }
     }
   }
 
@@ -2774,7 +2906,7 @@
   function disconnectDrive() {
     stopPolling();
     drive.status = "disconnected";
-    drive.accessToken = null;
+    clearToken();
     localStorage.setItem(LS_MODE_KEY, "local");
     render();
   }
@@ -2987,6 +3119,9 @@
     } else if (action === "export-audit") {
       exportAuditLog();
       closeExportMenu();
+    } else if (action === "backup-now") {
+      closeExportMenu();
+      backupNow();
     }
   });
 
@@ -3203,19 +3338,36 @@
     render();
     materializeRecurring();
 
+    var signIn = takeSignInResult();
+    if (signIn && signIn.token) {
+      render();
+      connectDrive(false);
+      return;
+    }
+    if (signIn && signIn.error) {
+      var quiet = /interaction_required|login_required|consent_required|account_selection_required/.test(signIn.error);
+      drive.status = "error";
+      drive.message = quiet ? "Sign in to Google to sync" :
+        signIn.error === "access_denied" ? "Google sign-in was cancelled" : "Couldn't sign in to Google (" + signIn.error + ")";
+      render();
+      return;
+    }
+
     var wantsDrive = localStorage.getItem(LS_MODE_KEY) === "drive" && drive.fileId;
-    if (wantsDrive) {
-      // try a silent reconnect once Google's script has loaded
-      var tries = 0;
-      var wait = setInterval(function () {
-        tries += 1;
-        if (window.google && google.accounts && google.accounts.oauth2) {
-          clearInterval(wait);
-          connectDrive(false).catch(function () {});
-        } else if (tries > 40) {
-          clearInterval(wait);
-        }
-      }, 100);
+    if (!wantsDrive) return;
+    if (loadToken()) {
+      connectDrive(false);
+      return;
+    }
+    // No valid token: try one silent round trip to Google (no prompt if already signed in and
+    // approved). Rate-limited so a failing silent sign-in can't bounce the page in a loop.
+    var lastSilent = Number(localStorage.getItem(LS_SILENT_AT_KEY)) || 0;
+    if (Date.now() - lastSilent > 2 * 60 * 1000) {
+      startGoogleSignIn(true);
+    } else {
+      drive.status = "error";
+      drive.message = "Sign in to Google to sync";
+      renderSyncBar();
     }
   }
 
