@@ -475,6 +475,14 @@
   .budget-row .budget-label { flex: 1; min-width: 0; }
   .budget-row .budget-amt { font-family: 'IBM Plex Mono', monospace; color: var(--ink); font-weight: 600; }
   .budget-form input[name="budget"] { width: 110px; text-align: right; }
+  .yearly-note { padding: 8px 14px 8px 34px; border-bottom: 1px solid var(--rule); font-size: 0.8rem; color: var(--ink-soft); }
+  .yearly-title { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; margin-bottom: 3px; }
+  .yearly-line { display: flex; justify-content: space-between; gap: 10px; padding: 2px 0; color: var(--ink); }
+  .yearly-line.total { border-top: 1px solid var(--rule); margin-top: 2px; padding-top: 4px; font-weight: 600; }
+  .yl-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .yl-when { color: var(--ink-soft); font-size: 0.72rem; }
+  .yl-amt { font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; font-size: 0.76rem; white-space: nowrap; }
+  .yl-foot { font-size: 0.72rem; margin-top: 3px; }
 
   .chevron { flex-shrink: 0; color: var(--ink-soft); display: flex; }
   .cat-panel { background: var(--paper-shade); }
@@ -1212,7 +1220,7 @@
   function isYearly(p) { return p.recurMonth !== undefined && p.recurMonth !== null; }
   function recurDescription(p) {
     return isYearly(p)
-      ? "Repeats yearly on " + MONTH_NAMES[p.recurMonth] + " " + p.recurDay
+      ? "Repeats yearly on " + MONTH_NAMES[p.recurMonth] + " " + p.recurDay + " (about $" + formatMoney((Number(p.amount) || 0) / 12) + "/mo)"
       : "Repeats monthly on day " + p.recurDay;
   }
 
@@ -1380,6 +1388,45 @@
     return html;
   }
 
+  // Yearly series active by the selected month: latest occurrence as template, with its start date.
+  function yearlySeriesFor(cat) {
+    var mk = monthKeyOf(selectedYear, selectedMonth);
+    var latest = {}, first = {};
+    (ledgerData("expenses")[cat] || []).forEach(function (p) {
+      if (!p.seriesId || !isYearly(p)) return;
+      if (!latest[p.seriesId] || p.date > latest[p.seriesId].date) latest[p.seriesId] = p;
+      if (!first[p.seriesId] || p.date < first[p.seriesId]) first[p.seriesId] = p.date;
+    });
+    return Object.keys(latest).filter(function (sid) { return first[sid].slice(0, 7) <= mk; })
+      .map(function (sid) { return latest[sid]; });
+  }
+
+  // Spending measured against a budget: actual charges, except yearly subscriptions count as
+  // 1/12 of their price every month instead of the full price in their renewal month.
+  function budgetSpent(cat) {
+    var spent = categoryTotal("expenses", cat);
+    monthList("expenses", cat).forEach(function (p) { if (p.seriesId && isYearly(p)) spent -= Number(p.amount) || 0; });
+    yearlySeriesFor(cat).forEach(function (p) { spent += (Number(p.amount) || 0) / 12; });
+    return spent;
+  }
+
+  function renderYearlyNote(cat) {
+    var series = yearlySeriesFor(cat);
+    if (!series.length) return "";
+    var perYear = 0;
+    var html = '<div class="yearly-note"><div class="yearly-title">Yearly subscriptions</div>';
+    series.forEach(function (p) {
+      var amt = Number(p.amount) || 0;
+      perYear += amt;
+      html += '<div class="yearly-line"><span class="yl-name">' + escapeHtml(p.description) + ' <span class="yl-when">renews ' + SHORT_MONTHS[p.recurMonth] + ' ' + p.recurDay + '</span></span>' +
+        '<span class="yl-amt">$' + formatMoney(amt) + '/yr &asymp; $' + formatMoney(amt / 12) + '/mo</span></div>';
+    });
+    if (series.length > 1) {
+      html += '<div class="yearly-line total"><span class="yl-name">Total</span><span class="yl-amt">$' + formatMoney(perYear) + '/yr &asymp; $' + formatMoney(perYear / 12) + '/mo</span></div>';
+    }
+    return html + '<div class="yl-foot">Totals show the full charge in the renewal month; the budget counts $' + formatMoney(perYear / 12) + ' every month.</div></div>';
+  }
+
   function budgetFor(ledger, cat) {
     if (ledger.key !== "expenses") return 0;
     var b = Number(state.data.budgets && state.data.budgets[cat]);
@@ -1416,25 +1463,26 @@
     var isAdding = ui.addingCategory && ui.addingCategory.ledger === ledger.key && ui.addingCategory.cat === cat;
     var total = categoryTotal(ledger.key, cat);
     var budget = budgetFor(ledger, cat);
+    var bSpent = budget ? budgetSpent(cat) : total;
     var html = '<div class="cat">';
     html += '<button type="button" class="cat-header' + (budget ? ' has-budget' : '') + '" data-action="toggle-category" data-ledger="' + ledger.key + '" data-cat="' + escapeHtml(cat) + '" data-tone="' + ledger.tone + '" data-hastotal="' + (total > 0 ? "true" : "false") + '">';
     html += '<span class="left"><span class="chevron">' + (isOpen ? ICONS.chevronDown : ICONS.chevronRight) + '</span>';
     html += '<span class="name">' + escapeHtml(cat) + '</span>';
     if (list.length) html += '<span class="count">(' + list.length + ')</span>';
     if (budget) {
-      var over = total > budget + 0.004;
-      html += '<span class="budget-note' + (over ? ' over' : '') + '">' + (over ? '$' + formatMoney(total - budget) + ' over' : '$' + formatMoney(budget - total) + ' left') + '</span>';
+      var over = bSpent > budget + 0.004;
+      html += '<span class="budget-note' + (over ? ' over' : '') + '">' + (over ? '$' + formatMoney(bSpent - budget) + ' over' : '$' + formatMoney(budget - bSpent) + ' left') + '</span>';
     }
     html += '</span>';
     html += '<span class="amt">$' + formatMoney(total) + '</span>';
     if (budget) {
-      html += '<span class="budget-bar' + (total > budget + 0.004 ? ' over' : '') + '" aria-hidden="true"><span style="width:' + Math.min(100, total / budget * 100).toFixed(1) + '%"></span></span>';
+      html += '<span class="budget-bar' + (bSpent > budget + 0.004 ? ' over' : '') + '" aria-hidden="true"><span style="width:' + Math.max(0, Math.min(100, bSpent / budget * 100)).toFixed(1) + '%"></span></span>';
     }
     html += '</button>';
 
     if (isOpen) {
       html += '<div class="cat-panel">';
-      if (ledger.key === "expenses") html += renderBudgetRow(cat, total, budget);
+      if (ledger.key === "expenses") html += renderBudgetRow(cat, bSpent, budget) + renderYearlyNote(cat);
       if (categoryGroupName(ledger, cat) === DEBT_GROUP_NAME) html += renderCreditCardsPanel(cat, total);
       for (var i = 0; i < list.length; i++) {
         var isEditing = ui.editingEntry && ui.editingEntry.ledger === ledger.key && ui.editingEntry.cat === cat && ui.editingEntry.id === list[i].id;
@@ -1682,8 +1730,8 @@
     var rows = [], unbudgeted = [], budgeted = 0, spentB = 0;
     var exp = LEDGERS.filter(function (l) { return l.key === "expenses"; })[0];
     expenseCategories().forEach(function (c) {
-      var spent = categoryTotal("expenses", c.cat);
       var b = budgetFor(exp, c.cat);
+      var spent = b ? budgetSpent(c.cat) : categoryTotal("expenses", c.cat);
       if (b) { rows.push({ cat: c.cat, spent: spent, budget: b }); budgeted += b; spentB += spent; }
       else if (spent > 0) unbudgeted.push({ cat: c.cat, spent: spent });
     });
@@ -2176,8 +2224,8 @@
     var spent = monthly[11], prev = monthly[10];
     var active = monthly.slice(0, 11).filter(function (v) { return v > 0; });
     var avg = active.length ? active.reduce(function (a, b) { return a + b; }, 0) / active.length : 0;
-    var budget = 0;
-    cats.forEach(function (c) { budget += budgetFor(exp, c); });
+    var budget = 0, bSpent = 0;
+    cats.forEach(function (c) { budget += budgetFor(exp, c); bSpent += budgetSpent(c); });
 
     var html = '<div class="gd-head" style="--gh: var(--grp-' + exp.groups.indexOf(group) % 8 + ')"><h1>' + escapeHtml(group.name) + '</h1><div class="gd-month">' + escapeHtml(monthLabel) +
       ' &middot; follows the month selected in the ledger</div></div>';
@@ -2187,7 +2235,7 @@
     html += '<div class="gd-card"><div class="rp-tiles">' +
       '<div><span class="rp-tile-label">Spent this month</span><span class="rp-tile-value">$' + formatMoney(spent) + '</span></div>' +
       (budget ? '<div><span class="rp-tile-label">Budgeted</span><span class="rp-tile-value">$' + formatMoney(budget) + '</span></div>' +
-        '<div><span class="rp-tile-label">' + (spent > budget + 0.004 ? 'Over' : 'Left') + '</span><span class="rp-tile-value' + (spent > budget + 0.004 ? ' over' : '') + '">$' + formatMoney(Math.abs(budget - spent)) + '</span></div>' : '') +
+        '<div><span class="rp-tile-label">' + (bSpent > budget + 0.004 ? 'Over' : 'Left') + '</span><span class="rp-tile-value' + (bSpent > budget + 0.004 ? ' over' : '') + '">$' + formatMoney(Math.abs(budget - bSpent)) + '</span></div>' : '') +
       '<div><span class="rp-tile-label">vs. ' + SHORT_MONTHS[keys[10].m] + '</span><span class="rp-tile-value">' + (diff < 0 ? '-' : '+') + '$' + formatMoney(Math.abs(diff)) + '</span></div>' +
       '<div><span class="rp-tile-label">Avg / month (prior 11)</span><span class="rp-tile-value">$' + formatMoney(avg) + '</span></div>' +
       '</div></div>';
@@ -2197,10 +2245,11 @@
       '<th>Category</th><th>Entries</th><th>Spent</th><th>Budget</th><th>Left</th><th>Share</th></tr></thead><tbody>';
     cats.forEach(function (c) {
       var t = categoryTotal("expenses", c), b = budgetFor(exp, c), n = monthList("expenses", c).length;
-      var over = b && t > b + 0.004;
+      var bs = b ? budgetSpent(c) : t;
+      var over = b && bs > b + 0.004;
       html += '<tr><td>' + escapeHtml(c) + '</td><td>' + n + '</td><td>$' + formatMoney(t) + '</td>' +
         '<td class="dim">' + (b ? '$' + formatMoney(b) : '&mdash;') + '</td>' +
-        '<td' + (over ? ' class="over"' : '') + '>' + (b ? (over ? '-' : '') + '$' + formatMoney(Math.abs(b - t)) : '&mdash;') + '</td>' +
+        '<td' + (over ? ' class="over"' : '') + '>' + (b ? (over ? '-' : '') + '$' + formatMoney(Math.abs(b - bs)) : '&mdash;') + '</td>' +
         '<td class="dim">' + (spent > 0 ? Math.round(t / spent * 100) + '%' : '&mdash;') + '</td></tr>';
     });
     html += '</tbody><tfoot><tr><td>Total</td><td></td><td>$' + formatMoney(spent) + '</td><td>' + (budget ? '$' + formatMoney(budget) : '&mdash;') + '</td><td></td><td></td></tr></tfoot></table></div></div>';
