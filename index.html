@@ -8,7 +8,7 @@
 <meta name="theme-color" content="#17332B">
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&family=Bricolage+Grotesque:opsz,wght@12..96,700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
   :root {
     --paper: #F1EEE1;
@@ -137,8 +137,8 @@
     text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 16px 20px 12px;
+    gap: 12px;
+    padding: 20px 20px 12px;
   }
 
   /* Title: lowercase Bricolage Grotesque in warm white with a soft shadow for lift off the photo. */
@@ -157,7 +157,25 @@
   @media (max-width: 480px) {
     .masthead h1 { font-size: 1.4rem; }
   }
-  .masthead > svg { width: 22px; height: 22px; opacity: 0.9; }
+  .monogram {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.16);
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+    font-family: 'Bricolage Grotesque', 'Inter', system-ui, sans-serif;
+    font-weight: 700;
+    font-size: 1.05rem;
+    letter-spacing: -0.04em;
+    color: #FFF8EC;
+    text-shadow: none;
+  }
 
   .month-bar {
     color: var(--paper);
@@ -166,7 +184,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 10px;
-    padding: 0 14px 14px;
+    padding: 0 20px 16px 14px; /* 14px on the left so the first arrow's chevron lines up with the monogram */
     flex-wrap: wrap;
   }
 
@@ -193,12 +211,12 @@
   .month-nav button.arrow:focus-visible { outline: 2px solid var(--credit); }
 
   .month-label {
-    font-family: 'Fraunces', Georgia, serif;
+    font-family: 'Bricolage Grotesque', 'Inter', system-ui, sans-serif;
     font-size: 1.15rem;
-    font-weight: 600;
-    letter-spacing: 0.01em;
+    font-weight: 700;
+    letter-spacing: -0.02em;
     padding: 0 4px;
-    min-width: 168px;
+    min-width: 150px;
     text-align: center;
   }
 
@@ -1008,10 +1026,7 @@
 <div class="sheet">
   <div class="cover-band">
   <div class="masthead">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <path d="M4 5.5c2.2-1.1 5.2-1.1 8 .8 2.8-1.9 5.8-1.9 8-.8v13c-2.2-1.1-5.2-1.1-8 .8-2.8-1.9-5.8-1.9-8-.8z"></path>
-      <line x1="12" y1="6.3" x2="12" y2="19.3"></line>
-    </svg>
+    <span class="monogram" aria-hidden="true">ds</span>
     <h1>de Streel Household Ledger</h1>
   </div>
   <div class="month-bar">
